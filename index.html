@@ -2,497 +2,358 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#080b14">
-<meta name="description" content="VidoAI Studio PRO MAX - Browser based video editor">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090d18">
 <title>VidoAI Studio PRO MAX</title>
-
 <style>
-:root {
-  --bg:#080b14;
-  --panel:#101625;
-  --panel2:#151e30;
-  --border:#27334b;
-  --text:#f4f7ff;
-  --muted:#94a3bb;
-  --accent:#8b5cf6;
-  --cyan:#22d3ee;
-  --green:#34d399;
-  --danger:#fb7185;
-}
-* {box-sizing:border-box}
-body {
-  margin:0;
-  background:radial-gradient(ellipse at top,#172039 0%,var(--bg) 52%);
-  color:var(--text);
-  font-family:Inter,system-ui,-apple-system,Arial,sans-serif;
-}
-button,input,select,textarea {font:inherit}
-button {cursor:pointer}
-header {
-  position:sticky;top:0;z-index:10;
-  background:#080b14ed;
-  backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--border);
-  padding:13px 4%;
-  display:flex;align-items:center;justify-content:space-between;
-  gap:12px;
-}
-.brand {display:flex;align-items:center;gap:11px}
-.logo {
-  width:43px;height:43px;border-radius:14px;
-  display:grid;place-items:center;font-size:22px;
-  background:linear-gradient(135deg,#8b5cf6,#22d3ee);
-  box-shadow:0 0 25px #8b5cf633;
-}
-.brand h1 {font-size:17px;margin:0}
-.brand small {color:var(--cyan);font-size:10px;letter-spacing:2px}
-.status {font-size:12px;color:var(--green)}
-main {max-width:1250px;margin:auto;padding:24px 16px 70px}
-.hero {margin:10px 0 24px}
-.hero h2 {font-size:clamp(27px,5vw,43px);margin:0 0 9px;letter-spacing:-1.5px}
-.gradient {
-  background:linear-gradient(90deg,#a78bfa,#22d3ee);
-  -webkit-background-clip:text;background-clip:text;color:transparent
-}
-.hero p {color:var(--muted);margin:0;line-height:1.6}
-.layout {display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:18px}
-.card {
-  background:linear-gradient(145deg,#121a2a,#0e1421);
-  border:1px solid var(--border);border-radius:19px;
-  padding:17px;margin-bottom:16px;min-width:0;
-}
-.card h3 {margin:0 0 15px;font-size:15px}
-.upload {
-  border:1.5px dashed #536581;border-radius:15px;padding:25px 12px;
-  text-align:center;cursor:pointer;background:#ffffff04;
-}
-.upload:hover {border-color:var(--cyan);background:#22d3ee08}
-.upload .icon {font-size:35px}
-.upload p {margin:7px 0;color:var(--muted);font-size:13px}
-input[type=file] {max-width:100%;font-size:12px}
-video {width:100%;max-height:420px;background:#02040a;border-radius:13px}
-.preview {margin-top:14px;position:relative}
-#emptyPreview {min-height:210px;display:grid;place-items:center;color:#64748b;text-align:center}
-.row {display:flex;gap:10px;align-items:center}
-.row>* {min-width:0}
-.field {margin:13px 0}
-label {display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#bac6dc;margin-bottom:7px}
-input[type=number],input[type=text],input[type=time],select,textarea {
-  width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);
-  background:#080e1b;color:var(--text);outline:none;
-}
-input:focus,select:focus,textarea:focus {border-color:var(--accent)}
-input[type=range] {width:100%;accent-color:var(--accent)}
-button {
-  border:1px solid var(--border);border-radius:11px;padding:11px 13px;
-  color:var(--text);background:#1a2437;transition:.15s
-}
-button:hover {filter:brightness(1.2)}
-.primary {
-  background:linear-gradient(110deg,#7c3aed,#4f46e5);
-  border:0;font-weight:700
-}
-.cyan {background:#083344;border-color:#155e75}
-.danger {color:#fecdd3;border-color:#9f1239;background:#4c1223}
-.full {width:100%}
-.tabs {display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:16px}
-.tab {font-size:12px;padding:10px 4px}
-.tab.active {border-color:var(--accent);background:#6d28d933;color:#ddd6fe}
-.section {display:none}
-.section.active {display:block}
-.grid2 {display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pillrow {display:flex;flex-wrap:wrap;gap:7px}
-.pillrow button {font-size:12px;padding:8px 10px}
-.help {font-size:11px;color:var(--muted);line-height:1.5}
-.actions {display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.progressbox {margin-top:14px;display:none}
-progress {width:100%;height:10px;accent-color:var(--cyan)}
-#message {font-size:12px;color:var(--cyan);line-height:1.5;overflow-wrap:anywhere}
-#downloadLink {display:none;margin-top:12px;text-align:center;text-decoration:none}
-footer {border-top:1px solid var(--border);padding:22px;text-align:center;color:var(--muted);font-size:12px}
-hr {border:0;border-top:1px solid var(--border);margin:18px 0}
-.badge {display:inline-block;border:1px solid #334155;border-radius:99px;padding:5px 9px;color:#c4b5fd;font-size:11px}
-#textPreview {
- position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
- color:white;font-size:24px;font-weight:900;text-align:center;
- white-space:pre-wrap;max-width:90%;text-shadow:2px 3px 5px black;
- pointer-events:none;width:90%
-}
-@media(max-width:800px) {
- .layout {grid-template-columns:1fr}
- header {padding:11px 13px}
- main {padding:20px 12px 50px}
- .brand h1 {font-size:14px}
- .status {font-size:10px}
- video {max-height:330px}
-}
-@media(max-width:380px) {
- .grid2 {grid-template-columns:1fr}
- .tabs {grid-template-columns:1fr}
-}
+:root{--bg:#090d18;--card:#121a2b;--border:#293650;--text:#f5f7ff;--muted:#a2aec4;--purple:#8b5cf6;--cyan:#22d3ee}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Arial,sans-serif}
+header{padding:15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:#0c1220;position:sticky;top:0;z-index:5}
+.brand{font-size:17px;font-weight:800}.brand span{color:var(--cyan);font-size:11px;display:block;letter-spacing:2px}
+main{max-width:1100px;margin:auto;padding:18px 12px 50px}
+h2{font-size:30px;margin:12px 0 5px}.muted,.help{color:var(--muted);font-size:13px;line-height:1.5}
+.layout{display:grid;grid-template-columns:1.2fr 1fr;gap:15px;margin-top:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px;min-width:0}
+h3{font-size:15px;margin:0 0 14px}
+.upload{border:2px dashed #536581;border-radius:13px;padding:20px 10px;text-align:center}
+input,select,textarea,button{font:inherit}
+input[type=file]{width:100%;margin-top:12px;font-size:12px}
+input[type=number],input[type=text],select,textarea{width:100%;padding:10px;background:#0a1020;color:white;border:1px solid var(--border);border-radius:9px}
+input[type=range]{width:100%;accent-color:var(--purple)}
+label{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#c7d2e5;margin:12px 0 6px}
+video{width:100%;max-height:440px;background:#03050a;border-radius:10px;display:none}
+.preview{position:relative;margin-top:15px}
+#placeholder{height:200px;display:grid;place-items:center;text-align:center;color:#8795ae;background:#080c15;border-radius:10px}
+#overlay{position:absolute;top:80%;left:5%;width:90%;text-align:center;white-space:pre-wrap;font-weight:900;text-shadow:2px 2px 5px black;pointer-events:none;overflow-wrap:anywhere}
+button{border:1px solid var(--border);border-radius:10px;padding:10px;background:#202b40;color:white;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.primary{background:linear-gradient(110deg,#7c3aed,#4f46e5);border:0;font-weight:700}
+.cyan{background:#083344;border-color:#155e75}
+.full{width:100%;margin-top:9px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.tabs button{flex:1;font-size:12px}
+.tabs button.active{border-color:var(--purple);background:#4c1d95}
+.panel{display:none}.panel.active{display:block}
+#status{padding:10px;border-radius:9px;background:#091321;color:var(--cyan);font-size:12px;overflow-wrap:anywhere;margin-top:12px}
+#download{display:none;text-decoration:none;color:white;background:#047857;border-radius:10px;padding:12px;text-align:center;margin-top:10px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}h2{font-size:27px}video{max-height:350px}}
 </style>
 </head>
-
 <body>
 <header>
-  <div class="brand">
-    <div class="logo">▶</div>
-    <div>
-      <h1>VidoAI Studio</h1>
-      <small>PRO MAX</small>
-    </div>
-  </div>
-  <div class="status">● Browser Editor</div>
+  <div class="brand">▶ VidoAI Studio <span>PRO MAX</span></div>
+  <small style="color:#34d399">● Browser editor</small>
 </header>
 
 <main>
-  <section class="hero">
-    <span class="badge">FREE BROWSER EDITOR</span>
-    <h2>Edit videos.<br><span class="gradient">Your style. Your studio.</span></h2>
-    <p>Trim, crop, colour grade, add lyrics and export your video. Start by selecting a video from your device.</p>
-  </section>
+<h2>Video editing, <span style="color:#22d3ee">your way.</span></h2>
+<p class="muted">Upload a video, preview it, adjust settings and export where supported.</p>
 
-  <div class="layout">
-    <div>
-      <div class="card">
-        <h3>📁 Import video</h3>
-        <div class="upload" id="dropZone">
-          <div class="icon">🎬</div>
-          <strong>Choose your video</strong>
-          <p>MP4, WebM, MOV and other browser-supported formats</p>
-          <input id="fileInput" type="file" accept="video/*">
-          <p class="help">Processing happens in your browser. Keep this page open while exporting.</p>
-        </div>
+<div class="layout">
+<section>
+<div class="card">
+<h3>📁 Select your video</h3>
+<div class="upload">
+  <div style="font-size:35px">🎬</div>
+  <strong>Choose video from your phone</strong>
+  <p class="help">Your video stays in this browser tab.</p>
+  <input id="file" type="file" accept="video/*">
+</div>
+<div class="preview">
+  <video id="video" controls playsinline></video>
+  <div id="placeholder">Your video preview will appear here.</div>
+  <div id="overlay"></div>
+</div>
+<div class="grid">
+<button id="play" class="cyan">▶ Play / Pause</button>
+<button id="reset">↺ Reset settings</button>
+</div>
+<label>Timeline <span id="clock">00:00 / 00:00</span></label>
+<input id="seek" type="range" min="0" max="100" value="0">
+<div id="status" role="status" aria-live="polite">Choose a video to start.</div>
+</div>
 
-        <div class="preview">
-          <video id="video" controls playsinline style="display:none"></video>
-          <div id="emptyPreview">Your video preview will appear here.</div>
-          <div id="textPreview"></div>
-        </div>
+<div class="card">
+<h3>📝 Text and lyrics</h3>
+<label>Text / lyrics</label>
+<textarea id="text" rows="3" placeholder="Write your lyrics..."></textarea>
+<div class="grid">
+<div><label>Text colour</label>
+<select id="color">
+<option value="white">White</option><option value="yellow">Yellow</option><option value="cyan">Cyan</option><option value="red">Red</option><option value="lime">Lime</option>
+</select></div>
+<div><label>Font size</label><input id="font" type="number" value="28" min="12" max="80"></div>
+</div>
+<label>Position</label>
+<select id="position"><option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option></select>
+<p class="help">Lyrics are burned into the export when the selected browser recording method supports it. Automatic speech transcription is not included.</p>
+</div>
+</section>
 
-        <div class="row" style="margin-top:12px">
-          <button id="playBtn" class="cyan" style="flex:1">▶ Play / Pause</button>
-          <button id="resetBtn" style="flex:1">↺ Reset settings</button>
-        </div>
-        <div class="field">
-          <label>Timeline <span id="durationLabel">00:00 / 00:00</span></label>
-          <input id="seek" type="range" min="0" max="100" value="0">
-        </div>
-      </div>
+<section>
+<div class="card">
+<h3>✂️ Trim and crop</h3>
+<div class="tabs">
+<button class="active" data-panel="trim">Trim</button>
+<button data-panel="crop">Crop</button>
+<button data-panel="enhance">Enhance</button>
+</div>
+<div class="panel active" id="trim">
+<div class="grid">
+<div><label>Start (seconds)</label><input id="start" type="number" min="0" value="0" step=".1"></div>
+<div><label>End (seconds)</label><input id="end" type="number" min="0" value="0" step=".1"></div>
+</div>
+<button id="markStart" class="full">Use current time as start</button>
+<button id="markEnd" class="full">Use current time as end</button>
+</div>
+<div class="panel" id="crop">
+<label>Aspect ratio</label>
+<select id="ratio">
+<option value="original">Original</option><option value="9:16">9:16 Reels / Shorts</option><option value="16:9">16:9 YouTube</option><option value="1:1">1:1 Square</option><option value="4:3">4:3</option><option value="3:4">3:4</option><option value="2:3">2:3</option><option value="3:2">3:2</option><option value="4:5">4:5 Portrait</option><option value="5:4">5:4</option><option value="21:9">21:9 Cinema</option>
+</select>
+<label>Horizontal position <span id="xLabel">50%</span></label><input id="x" type="range" min="0" max="100" value="50">
+<label>Vertical position <span id="yLabel">50%</span></label><input id="y" type="range" min="0" max="100" value="50">
+<p class="help">The preview shows the selected crop framing.</p>
+</div>
+<div class="panel" id="enhance">
+<label>Brightness <span id="bLabel">100%</span></label><input id="brightness" type="range" min="50" max="160" value="100">
+<label>Contrast <span id="cLabel">100%</span></label><input id="contrast" type="range" min="50" max="180" value="100">
+<label>Saturation <span id="sLabel">100%</span></label><input id="saturation" type="range" min="0" max="200" value="100">
+<label>Sharpness <span id="shLabel">0</span></label><input id="sharpness" type="range" min="0" max="5" value="0">
+<p class="help">Brightness, contrast and saturation are real browser filters. Sharpness is displayed as a setting but no AI upscaling is provided in this version.</p>
+</div>
+</div>
 
-      <div class="card">
-        <h3>🛠️ Editing tools</h3>
-        <div class="tabs">
-          <button class="tab active" data-tab="trim">✂️ Trim</button>
-          <button class="tab" data-tab="crop">📐 Crop</button>
-          <button class="tab" data-tab="enhance">✨ Enhance</button>
-        </div>
+<div class="card">
+<h3>⚙️ Export settings</h3>
+<label>Export method</label>
+<select id="method"><option value="webm">WebM (browser support required)</option><option value="realtime">Real-time recording (may take as long as the video)</option></select>
+<label>Output size</label>
+<select id="resolution"><option value="original">Original dimensions</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select>
+<label>Audio volume <span id="volLabel">100%</span></label>
+<input id="volume" type="range" min="0" max="150" value="100">
+<label><span>Mute audio</span><input id="mute" type="checkbox" style="width:auto"></label>
+<button id="export" class="primary full">⬇ Export edited video</button>
+<button id="snapshot" class="full">📸 Save preview frame</button>
+<a id="download">Download edited video</a>
+<p class="help">This version exports by recording the filtered preview in real time. Keep the tab open and video playing until export finishes. Some mobile browsers do not support canvas recording or audio capture.</p>
+</div>
 
-        <div class="section active" id="trim">
-          <div class="grid2">
-            <div class="field">
-              <label>Start time (seconds)</label>
-              <input id="startTime" type="number" min="0" value="0" step="0.1">
-            </div>
-            <div class="field">
-              <label>End time (seconds)</label>
-              <input id="endTime" type="number" min="0" value="0" step="0.1">
-            </div>
-          </div>
-          <p class="help">The exported video starts at your chosen start time and ends at your chosen end time.</p>
-          <button id="setStart" class="full">Use current time as start</button>
-          <button id="setEnd" class="full" style="margin-top:8px">Use current time as end</button>
-        </div>
-
-        <div class="section" id="crop">
-          <div class="field">
-            <label>Aspect ratio</label>
-            <select id="ratio">
-              <option value="original">Original</option>
-              <option value="9:16">9:16 — Reels / Shorts</option>
-              <option value="16:9">16:9 — YouTube</option>
-              <option value="1:1">1:1 — Square</option>
-              <option value="4:3">4:3</option>
-              <option value="3:4">3:4</option>
-              <option value="2:3">2:3</option>
-              <option value="3:2">3:2</option>
-              <option value="4:5">4:5 — Instagram portrait</option>
-              <option value="5:4">5:4</option>
-              <option value="21:9">21:9 — Cinematic</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Crop position X <span id="xVal">50%</span></label>
-            <input id="cropX" type="range" min="0" max="100" value="50">
-          </div>
-          <div class="field">
-            <label>Crop position Y <span id="yVal">50%</span></label>
-            <input id="cropY" type="range" min="0" max="100" value="50">
-          </div>
-          <p class="help">Choose the ratio and position. Export applies the crop; the preview displays the selected framing.</p>
-        </div>
-
-        <div class="section" id="enhance">
-          <div class="field">
-            <label>Brightness <span id="brightVal">100%</span></label>
-            <input id="brightness" type="range" min="50" max="160" value="100">
-          </div>
-          <div class="field">
-            <label>Contrast <span id="contrastVal">100%</span></label>
-            <input id="contrast" type="range" min="50" max="180" value="100">
-          </div>
-          <div class="field">
-            <label>Saturation <span id="satVal">100%</span></label>
-            <input id="saturation" type="range" min="0" max="200" value="100">
-          </div>
-          <div class="field">
-            <label>Sharpness <span id="sharpVal">0</span></label>
-            <input id="sharpness" type="range" min="0" max="5" value="0">
-          </div>
-          <p class="help">Brightness, contrast and saturation are applied to the exported video. Sharpness is a simple filter, not AI upscaling.</p>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>📝 Text & stylish lyrics</h3>
-        <div class="field">
-          <label>Text / lyrics</label>
-          <textarea id="overlayText" rows="3" placeholder="Write your lyrics here..."></textarea>
-        </div>
-        <div class="grid2">
-          <div class="field">
-            <label>Text colour</label>
-            <select id="textColor">
-              <option value="white">White</option>
-              <option value="yellow">Yellow</option>
-              <option value="cyan">Cyan</option>
-              <option value="red">Red</option>
-              <option value="lime">Lime</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Font size</label>
-            <input id="fontSize" type="number" min="12" max="80" value="28">
-          </div>
-        </div>
-        <div class="field">
-          <label>Text position</label>
-          <select id="textPosition">
-            <option value="bottom">Bottom</option>
-            <option value="center">Center</option>
-            <option value="top">Top</option>
-          </select>
-        </div>
-        <p class="help">Text is burned into the exported video. Automatic speech recognition and word-by-word auto lyrics require an additional transcription engine.</p>
-      </div>
-    </div>
-
-    <div>
-      <div class="card">
-        <h3>⚙️ Export settings</h3>
-        <div class="field">
-          <label>Output resolution</label>
-          <select id="resolution">
-            <option value="original">Original resolution</option>
-            <option value="1080">1080p — Full HD</option>
-            <option value="720">720p — HD</option>
-            <option value="480">480p</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Export format</label>
-          <select id="format">
-            <option value="mp4">MP4 (H.264)</option>
-            <option value="webm">WebM</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Quality / bitrate</label>
-          <select id="quality">
-            <option value="high">High quality</option>
-            <option value="medium">Balanced</option>
-            <option value="small">Smaller file</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Audio volume <span id="volumeVal">100%</span></label>
-          <input id="volume" type="range" min="0" max="150" value="100">
-        </div>
-        <div class="field">
-          <label><span>Mute audio</span><input id="mute" type="checkbox" style="width:auto"></label>
-        </div>
-        <hr>
-        <div class="actions">
-          <button id="loadEngine" class="cyan">⚡ Load engine</button>
-          <button id="exportBtn" class="primary">⬇ Export video</button>
-        </div>
-        <div class="progressbox" id="progressBox">
-          <label id="progressLabel">Preparing...</label>
-          <progress id="progress" max="100" value="0"></progress>
-        </div>
-        <p id="message">Choose a video to get started.</p>
-        <a id="downloadLink" class="primary full" download="vidoai-edited.mp4">⬇ Download edited video</a>
-      </div>
-
-      <div class="card">
-        <h3>🎯 Quick presets</h3>
-        <div class="pillrow">
-          <button data-preset="reels">📱 Reels 9:16</button>
-          <button data-preset="youtube">🖥️ YouTube 16:9</button>
-          <button data-preset="square">⬜ Square 1:1</button>
-          <button data-preset="cinema">🎞️ Cinema 21:9</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>✨ Smart tools</h3>
-        <button id="autoFrame" class="full">🎯 Auto-fit framing</button>
-        <p class="help">Fits the video to your chosen aspect ratio. This does not detect or track a person's face.</p>
-        <hr>
-        <button id="extractAudio" class="full">🎵 Export audio only</button>
-        <p class="help">Extracts audio to MP3 when supported by the loaded engine.</p>
-        <hr>
-        <button id="snapshot" class="full">📸 Save preview frame</button>
-        <p class="help">Saves a still image of the current preview, including basic colour filters.</p>
-      </div>
-
-      <div class="card">
-        <h3>🔒 Privacy & limits</h3>
-        <p class="help">Your selected video is processed locally in your browser by this page. It is not uploaded to a VidoAI server by this code. External CDN libraries are downloaded when needed. Very large files can run out of phone memory. AI super-resolution, automatic speech transcription and server-side projects are not included in this single-file version.</p>
-      </div>
-    </div>
-  </div>
+<div class="card">
+<h3>🎯 Quick presets</h3>
+<div class="grid">
+<button data-ratio="9:16">📱 Reels</button>
+<button data-ratio="16:9">🖥️ YouTube</button>
+<button data-ratio="1:1">⬜ Square</button>
+<button data-ratio="21:9">🎞️ Cinema</button>
+</div>
+<p class="help">Auto framing here means centre framing only. AI face tracking, automatic lyrics and AI super-resolution require additional processing models.</p>
+</div>
+</section>
+</div>
 </main>
+<footer>VidoAI Studio PRO MAX · Browser video editor</footer>
 
-<footer>
-  VidoAI Studio PRO MAX · Browser Video Editor<br>
-  Made for creators ❤️
-</footer>
-
-<script type="module">
-import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
-import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js';
-
+<script>
+(() => {
 const $ = id => document.getElementById(id);
 const video = $('video');
-const fileInput = $('fileInput');
-let sourceFile = null;
-let ffmpeg = null;
-let engineLoaded = false;
-let sourceURL = null;
-let outputURL = null;
-let sourceName = 'video.mp4';
+let file = null, sourceURL = null, resultURL = null, busy = false;
 
-function message(text) { $('message').textContent = text; }
-function formatTime(s) {
-  if (!Number.isFinite(s)) return '00:00';
-  return Math.floor(s/60).toString().padStart(2,'0') + ':' +
-    Math.floor(s%60).toString().padStart(2,'0');
+function say(text){ $('status').textContent = text; }
+function time(s){s=Number(s)||0;return String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');}
+function filterCSS(){
+ return `brightness(${$('brightness').value}%) contrast(${$('contrast').value}%) saturate(${$('saturation').value}%)`;
 }
-function progress(value, text) {
-  $('progressBox').style.display = 'block';
-  $('progress').value = value;
-  $('progressLabel').textContent = text;
+function update(){
+ video.style.filter=filterCSS();
+ const r=$('ratio').value;
+ if(r==='original'){video.style.aspectRatio='auto';video.style.objectFit='contain';}
+ else {
+   const [w,h]=r.split(':').map(Number);
+   video.style.aspectRatio=`${w}/${h}`;
+   video.style.objectFit='cover';
+   video.style.objectPosition=`${$('x').value}% ${$('y').value}%`;
+ }
+ $('xLabel').textContent=$('x').value+'%';
+ $('yLabel').textContent=$('y').value+'%';
+ $('bLabel').textContent=$('brightness').value+'%';
+ $('cLabel').textContent=$('contrast').value+'%';
+ $('sLabel').textContent=$('saturation').value+'%';
+ $('shLabel').textContent=$('sharpness').value;
+ $('volLabel').textContent=$('volume').value+'%';
+ const o=$('overlay');
+ o.textContent=$('text').value;
+ o.style.color=$('color').value;
+ o.style.fontSize=Math.max(12,Math.min(80,Number($('font').value)||28))+'px';
+ o.style.top=$('position').value==='top'?'10%':$('position').value==='center'?'50%':'80%';
 }
-function safeName(name) {
-  return name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,100) || 'video.mp4';
-}
-function getInputExt() {
-  const ext = sourceName.split('.').pop().toLowerCase();
-  return /^[a-z0-9]{2,5}$/.test(ext) ? ext : 'mp4';
-}
-
-fileInput.addEventListener('change', () => {
-  const file = fileInput.files?.[0];
-  if (!file) return;
-  if (!file.type.startsWith('video/')) {
-    message('Please select a video file.');
-    return;
-  }
-  sourceFile = file;
-  sourceName = file.name;
-  if (sourceURL) URL.revokeObjectURL(sourceURL);
-  sourceURL = URL.createObjectURL(file);
-  video.src = sourceURL;
-  video.style.display = 'block';
-  $('emptyPreview').style.display = 'none';
-  video.load();
-  message('Video loaded: ' + file.name + ' (' + (file.size/1024/1024).toFixed(1) + ' MB)');
-  $('downloadLink').style.display = 'none';
+$('file').addEventListener('change',e=>{
+ const f=e.target.files && e.target.files[0];
+ if(!f)return;
+ if(!f.type.startsWith('video/')){say('Please select a video file.');return;}
+ file=f;
+ if(sourceURL)URL.revokeObjectURL(sourceURL);
+ sourceURL=URL.createObjectURL(f);
+ video.pause();
+ video.removeAttribute('src');
+ video.load();
+ video.src=sourceURL;
+ video.style.display='block';
+ $('placeholder').style.display='none';
+ video.onloadedmetadata=()=>{
+   $('start').value=0;
+   $('end').value=Number.isFinite(video.duration)?video.duration.toFixed(1):0;
+   $('seek').max=Number.isFinite(video.duration)?video.duration:100;
+   say('Video ready: '+f.name+' ('+(f.size/1048576).toFixed(1)+' MB).');
+   update();
+ };
+ video.onerror=()=>say('Browser cannot preview this format. Try an MP4 video encoded with H.264.');
+ video.load();
+ say('Video selected. Loading preview...');
 });
-
-video.addEventListener('loadedmetadata', () => {
-  $('endTime').value = video.duration.toFixed(1);
-  $('durationLabel').textContent = formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
-  $('seek').max = video.duration || 100;
-  updatePreview();
-});
-video.addEventListener('timeupdate', () => {
-  $('seek').value = video.currentTime;
-  $('durationLabel').textContent = formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
-});
-$('seek').addEventListener('input', () => {
-  if (video.duration) video.currentTime = Number($('seek').value);
-});
-$('playBtn').onclick = () => {
-  if (!sourceFile) return message('Choose a video first.');
-  if (video.paused) video.play().catch(()=>{});
-  else video.pause();
+$('play').onclick=()=>{
+ if(!file)return say('Pehle video select kar bhai.');
+ if(video.paused)video.play().then(()=>say('Video playing.')).catch(()=>say('Play karne ke liye video par tap kar.'));
+ else {video.pause();say('Video paused.');}
 };
-$('setStart').onclick = () => $('startTime').value = video.currentTime.toFixed(1);
-$('setEnd').onclick = () => $('endTime').value = video.currentTime.toFixed(1);
-
-document.querySelectorAll('.tab').forEach(button => {
-  button.onclick = () => {
-    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    button.classList.add('active');
-    $(button.dataset.tab).classList.add('active');
-  };
+video.addEventListener('timeupdate',()=>{
+ $('seek').value=video.currentTime;
+ $('clock').textContent=time(video.currentTime)+' / '+time(video.duration);
 });
+$('seek').oninput=()=>{if(Number.isFinite(video.duration))video.currentTime=Number($('seek').value);};
+$('markStart').onclick=()=>{if(!file)return say('Select a video first.');$('start').value=video.currentTime.toFixed(1);};
+$('markEnd').onclick=()=>{if(!file)return say('Select a video first.');$('end').value=video.currentTime.toFixed(1);};
 
-function filterString() {
-  return `brightness(${$('brightness').value}%) contrast(${$('contrast').value}%) saturate(${$('saturation').value}%)`;
-}
-function updatePreview() {
-  video.style.filter = filterString();
-  const ratio = $('ratio').value;
-  if (ratio !== 'original') {
-    const [rw,rh] = ratio.split(':').map(Number);
-    const desired = rw/rh;
-    video.style.objectFit = 'cover';
-    video.style.aspectRatio = `${rw}/${rh}`;
-    video.style.objectPosition = `${$('cropX').value}% ${$('cropY').value}%`;
-    video.style.maxHeight = '420px';
-  } else {
-    video.style.objectFit = 'contain';
-    video.style.aspectRatio = 'auto';
-    video.style.objectPosition = 'center';
+document.querySelectorAll('[data-panel]').forEach(btn=>btn.onclick=()=>{
+ document.querySelectorAll('[data-panel]').forEach(b=>b.classList.remove('active'));
+ document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+ btn.classList.add('active');$(btn.dataset.panel).classList.add('active');
+});
+['brightness','contrast','saturation','sharpness','x','y','ratio','text','font','position','color'].forEach(id=>$(id).addEventListener('input',update));
+$('volume').addEventListener('input',update);
+document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>{$('ratio').value=b.dataset.ratio;update();});
+
+$('reset').onclick=()=>{
+ $('start').value=0;$('end').value=video.duration||0;
+ $('ratio').value='original';$('x').value=50;$('y').value=50;
+ $('brightness').value=100;$('contrast').value=100;$('saturation').value=100;$('sharpness').value=0;
+ $('text').value='';$('font').value=28;$('color').value='white';$('position').value='bottom';
+ $('volume').value=100;$('mute').checked=false;update();say('Settings reset.');
+};
+
+$('snapshot').onclick=()=>{
+ if(!file||!video.videoWidth)return say('Pehle video load hone de.');
+ try{
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  const ctx=canvas.getContext('2d');ctx.filter=filterCSS();ctx.drawImage(video,0,0);
+  const txt=$('text').value.trim();
+  if(txt){ctx.filter='none';ctx.font=`bold ${Number($('font').value)||28}px sans-serif`;ctx.fillStyle=$('color').value;ctx.textAlign='center';ctx.strokeStyle='black';ctx.lineWidth=3;const y=$('position').value==='top'?canvas.height*.12:$('position').value==='center'?canvas.height/2:canvas.height*.9;ctx.strokeText(txt,canvas.width/2,y,canvas.width*.9);ctx.fillText(txt,canvas.width/2,y,canvas.width*.9);}
+  canvas.toBlob(blob=>{if(!blob)return say('Frame save failed.');const a=document.createElement('a');const u=URL.createObjectURL(blob);a.href=u;a.download='vidoai-frame.png';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000);say('Preview frame saved.');});
+ }catch(e){say('Frame export failed: '+e.message);}
+};
+
+$('export').onclick=async()=>{
+ if(!file)return say('Pehle video select kar bhai.');
+ if(busy)return;
+ if(!video.videoWidth||!Number.isFinite(video.duration))return say('Wait until video preview loads.');
+ const start=Number($('start').value),end=Number($('end').value);
+ if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>video.duration+0.1)return say('Start/end time check kar.');
+ if(!HTMLCanvasElement.prototype.captureStream||!window.MediaRecorder)return say('Is browser mein video recording export supported nahi hai. Try updated Chrome.');
+ const ratio=$('ratio').value;
+ let width=video.videoWidth,height=video.videoHeight;
+ if(ratio!=='original'){
+  const [rw,rh]=ratio.split(':').map(Number),r=rw/rh;
+  if(width/height>r)width=Math.round(height*r);else height=Math.round(width/r);
+ }
+ const res=$('resolution').value;
+ if(res!=='original'){
+  const maxH=Number(res),scale=Math.min(1,maxH/height);
+  width=Math.max(2,Math.round(width*scale/2)*2);
+  height=Math.max(2,Math.round(height*scale/2)*2);
+ }
+ width=Math.max(2,width);height=Math.max(2,height);
+ const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+ const ctx=canvas.getContext('2d');
+ const stream=canvas.captureStream(30);
+ let audioContext=null;
+ try{
+  if(!$('mute').checked&&Number($('volume').value)>0){
+   audioContext=new AudioContext();
+   const src=audioContext.createMediaElementSource(video);
+   const gain=audioContext.createGain();gain.gain.value=Number($('volume').value)/100;
+   const dest=audioContext.createMediaStreamDestination();
+   src.connect(gain);gain.connect(dest);dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
   }
-  const txt = $('overlayText').value;
-  const overlay = $('textPreview');
-  overlay.textContent = txt;
-  overlay.style.color = $('textColor').value;
-  overlay.style.fontSize = Math.max(12,Math.min(80,Number($('fontSize').value)||28))+'px';
-  overlay.style.top = $('textPosition').value === 'top' ? '15%' :
-    $('textPosition').value === 'bottom' ? '82%' : '50%';
-}
-['brightness','contrast','saturation','cropX','cropY','ratio','overlayText','textColor','fontSize','textPosition'].forEach(id => {
-  $(id).addEventListener('input', () => {
-    const map = {brightness:'brightVal',contrast:'contrastVal',saturation:'satVal',cropX:'xVal',cropY:'yVal'};
-    if(map[id]) $(map[id]).textContent = $(id).value + (id==='cropX'||id==='cropY'?'%':id==='brightness'||id==='contrast'||id==='saturation'?'%':'');
-    updatePreview();
+ }catch(e){console.warn('Audio capture unavailable',e);}
+ const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+ if(!mime){say('Browser does not support WebM recording.');return;}
+ const chunks=[];let recorder;
+ try{recorder=new MediaRecorder(stream,{mimeType:mime});}
+ catch(e){say('Could not start recorder: '+e.message);return;}
+ busy=true;$('export').disabled=true;
+ const previousTime=video.currentTime,wasPlaying=!video.paused;
+ const draw=()=>{
+  if(!busy)return;
+  ctx.fillStyle='black';ctx.fillRect(0,0,width,height);
+  const vw=video.videoWidth,vh=video.videoHeight;
+  if(vw&&vh){
+   let sw=vw,sh=vh,sx=0,sy=0;
+   if(ratio!=='original'){
+    const r=width/height;
+    if(vw/vh>r){sw=vh*r;sx=(vw-sw)*Number($('x').value)/100;}
+    else{sh=vw/r;sy=(vh-sh)*Number($('y').value)/100;}
+   }
+   ctx.filter=filterCSS();ctx.drawImage(video,sx,sy,sw,sh,0,0,width,height);ctx.filter='none';
+   const txt=$('text').value.trim();
+   if(txt){ctx.fillStyle=$('color').value;ctx.strokeStyle='black';ctx.lineWidth=Math.max(2,width/300);ctx.font=`bold ${Math.max(12,Number($('font').value)||28)*width/vw}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';const ty=$('position').value==='top'?height*.12:$('position').value==='center'?height/2:height*.88;ctx.strokeText(txt,width/2,ty,width*.9);ctx.fillText(txt,width/2,ty,width*.9);}
+  }
+  requestAnimationFrame(draw);
+ };
+ recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+ recorder.onerror=e=>{busy=false;$('export').disabled=false;say('Recorder error. Try a shorter video.');};
+ recorder.onstop=()=>{
+  busy=false;$('export').disabled=false;
+  stream.getTracks().forEach(t=>t.stop());
+  if(audioContext)audioContext.close().catch(()=>{});
+  if(resultURL)URL.revokeObjectURL(resultURL);
+  resultURL=URL.createObjectURL(new Blob(chunks,{type:mime}));
+  const a=$('download');a.href=resultURL;a.download='vidoai-edited.webm';a.style.display='block';a.textContent='⬇ Download edited video';
+  say('Export complete! Tap Download edited video.');
+ };
+ try{
+  requestAnimationFrame(draw);
+  recorder.start(500);
+  video.currentTime=start;
+  await new Promise((resolve,reject)=>{
+   const onSeek=()=>{video.removeEventListener('seeked',onSeek);resolve();};
+   video.addEventListener('seeked',onSeek,{once:true});
+   setTimeout(()=>{video.removeEventListener('seeked',onSeek);resolve();},1500);
   });
-});
-$('volume').addEventListener('input', () => $('volumeVal').textContent = $('volume').value + '%');
-$('resetBtn').onclick = () => {
-  $('startTime').value = 0;
-  $('endTime').value = video.duration || 0;
-  $('ratio').value = 'original';
-  $('cropX').value = 50; $('cropY').value = 50;
-  $('brightness').value = 100; $('contrast').value = 100;
-  $('saturation').value = 100; $('sharpness').value = 0;
-  $('overlayText').value = ''; $('fontSize').value = 28;
-  $('textPosition').value = 'bottom'; $('textColor').value = 'white';
-  $('volume').value = 100; $(
+  await video.play();
+  say('Recording edited preview in real time. Keep this tab open.');
+  const check=()=>{
+   if(!busy)return;
+   if(video.currentTime>=end||video.ended){
+    video.pause();
+    if(recorder.state!=='inactive')recorder.stop();
+    return;
+   }
+   setTimeout(check,200);
+  };
+  check();
+ }catch(e){
+  busy=false;$('export').disabled=false;
+  try{if(recorder.state!=='inactive')recorder.stop();}catch(_){}
+  say('Export error: '+e.message+'. Try another browser or smaller video.');
+ }
+};
+window.addEventListener('beforeunload',()=>{if(sourceURL)URL.revokeObjectURL(sourceURL);if(resultURL)URL.revokeObjectURL(resultURL);});
+})();
+</script>
+</body>
+                                                         </html>
