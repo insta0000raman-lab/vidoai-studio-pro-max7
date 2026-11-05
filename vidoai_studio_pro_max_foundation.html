@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b14">
+<title>VidoAI Studio PRO MAX</title>
+<style>
+:root{--bg:#080a12;--panel:rgba(255,255,255,.075);--panel2:rgba(255,255,255,.11);--line:rgba(255,255,255,.13);--txt:#f5f6ff;--muted:#9ba3bd;--a:#9b8cff;--b:#5de1d0;--danger:#ff718d;--shadow:0 18px 60px #0008}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 600px at 10% -10%,#443a8a66,transparent 60%),radial-gradient(800px 500px at 100% 0%,#126b7060,transparent 55%),var(--bg);color:var(--txt);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+button,input,select{font:inherit}button{cursor:pointer;color:inherit;border:1px solid var(--line);background:linear-gradient(135deg,#ffffff17,#ffffff08);border-radius:13px;padding:10px 13px;transition:.18s}button:active{transform:scale(.97)}button:hover{border-color:#aaa0ff88;background:#ffffff1c}.primary{background:linear-gradient(120deg,#7667ef,#35bcb2);border:0;color:white;font-weight:750}.danger{color:#ff9aab}.app{max-width:1500px;margin:auto;padding:18px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.brand{display:flex;align-items:center;gap:11px}.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#9d82ff,#4ce0cf);display:grid;place-items:center;color:#090b14;font-size:21px;font-weight:1000;box-shadow:0 8px 30px #8d7bff55}.brand h1{font-size:17px;margin:0;letter-spacing:.3px}.brand small{color:var(--muted)}.top-actions{display:flex;gap:8px;flex-wrap:wrap}.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,.8fr);gap:15px}.panel{background:linear-gradient(145deg,#ffffff12,#ffffff06);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:21px;padding:15px;min-width:0}.preview-panel{padding:13px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.panel-head h2{font-size:14px;margin:0}.muted{color:var(--muted)}.preview-wrap{position:relative;background:#03040a;border:1px solid #ffffff18;border-radius:16px;overflow:hidden;display:grid;place-items:center;min-height:220px;aspect-ratio:16/9}.preview-wrap video{width:100%;height:100%;max-height:68vh;object-fit:contain;background:#03040a}.empty{position:absolute;text-align:center;color:#aeb4ca;padding:20px;pointer-events:none}.empty strong{display:block;color:white;font-size:16px;margin:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.toolbar button{flex:1;min-width:90px}.transport{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin-top:12px}.time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}.range{width:100%;accent-color:#9d8dff}.side{display:flex;flex-direction:column;gap:13px}.tabs{display:flex;gap:6px;overflow:auto;padding-bottom:5px}.tab{white-space:nowrap;padding:8px 11px;font-size:12px}.tab.active{background:#9585ff30;border-color:#aa9cff88;color:#d8d1ff}.control{margin:12px 0}.control label{display:flex;justify-content:space-between;gap:10px;color:#dce0f2;font-size:12px;margin-bottom:7px}.control input[type=range]{width:100%;accent-color:#9c8cff}.control input[type=text],.control input[type=number],select{width:100%;background:#0b0e1b;color:white;border:1px solid var(--line);border-radius:10px;padding:10px}.control select option{background:#101426}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.section{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}.section h3{font-size:12px;color:#c4c9dd;margin:0 0 8px}.status{font-size:12px;color:var(--muted);min-height:18px;margin-top:8px}.timeline{margin-top:15px}.track{height:54px;border-radius:12px;background:#080b15;border:1px solid var(--line);position:relative;overflow:hidden}.clip{position:absolute;inset:7px auto 7px 7px;width:calc(100% - 14px);border-radius:8px;background:linear-gradient(90deg,#6559c9,#1a9d9a);display:flex;align-items:center;padding:8px;font-size:12px;font-weight:700;overflow:hidden;white-space:nowrap}.timeline-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.timeline-controls .control{margin:0}.pill{font-size:11px;border:1px solid var(--line);border-radius:30px;padding:5px 9px;color:#c8cce0}.footer{color:#777f99;text-align:center;font-size:11px;padding:20px 5px}.hidden{display:none!important}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.app{padding:12px}.top{align-items:flex-start}.brand h1{font-size:15px}.preview-wrap{min-height:190px}.side{display:grid;grid-template-columns:1fr}.top-actions button{padding:8px 10px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+ <div class="brand"><div class="logo">V</div><div><h1>VidoAI Studio <span style="color:#a99cff">PRO MAX</span></h1><small>Offline-first video workspace</small></div></div>
+ <div class="top-actions"><button id="newProject">New project</button><button id="saveProject">Save project</button><button class="primary" id="exportBtn">Export video</button></div>
+</header>
+<main class="layout">
+ <section>
+  <div class="panel preview-panel">
+   <div class="panel-head"><h2>Preview monitor</h2><span class="pill" id="mediaState">No media loaded</span></div>
+   <div class="preview-wrap" id="previewWrap">
+    <video id="video" playsinline controls></video>
+    <div class="empty" id="empty"><div style="font-size:32px">✦</div><strong>Your creative space</strong>Import a video to begin editing</div>
+   </div>
+   <div class="toolbar">
+    <button class="primary" id="importBtn">＋ Import video</button><button id="playBtn">▶ Play</button><button id="fitBtn">Fit preview</button><button id="resetBtn">Reset adjustments</button>
+    <input id="fileInput" type="file" accept="video/*" class="hidden">
+   </div>
+   <div class="transport"><span class="time" id="currentTime">00:00.00</span><input class="range" id="scrub" type="range" min="0" max="100" value="0"><span class="time" id="duration">00:00.00</span></div>
+  </div>
+  <div class="panel timeline">
+   <div class="panel-head"><h2>Timeline · Main video track</h2><span class="pill" id="timelineDuration">00:00</span></div>
+   <div class="track"><div class="clip" id="clip">VIDEO CLIP · Import media to start</div></div>
+   <div class="timeline-controls">
+    <div class="control"><label>Trim start (seconds)</label><input id="trimStart" type="number" min="0" step=".1" value="0"></div>
+    <div class="control"><label>Trim end (seconds)</label><input id="trimEnd" type="number" min="0" step=".1" value="0"></div>
+   </div>
+   <div class="toolbar"><button id="setIn">Set in at playhead</button><button id="setOut">Set out at playhead</button><button id="goIn">Go to in point</button><button id="goOut">Go to out point</button></div>
+   <div class="status" id="trimStatus">Set an in and out point to define the export range.</div>
+  </div>
+ </section>
+ <aside class="side">
+  <div class="panel">
+   <div class="panel-head"><h2>Editing tools</h2><span class="pill">Live preview</span></div>
+   <div class="tabs"><button class="tab active" data-tab="adjust">Adjust</button><button class="tab" data-tab="transform">Canvas</button><button class="tab" data-tab="text">Text</button><button class="tab" data-tab="audio">Audio</button></div>
+   <div id="tab-adjust">
+    <div class="control"><label>Brightness <b id="brightnessVal">100%</b></label><input id="brightness" type="range" min="0" max="200" value="100"></div>
+    <div class="control"><label>Contrast <b id="contrastVal">100%</b></label><input id="contrast" type="range" min="0" max="200" value="100"></div>
+    <div class="control"><label>Saturation <b id="saturationVal">100%</b></label><input id="saturation" type="range" min="0" max="200" value="100"></div>
+    <div class="control"><label>Blur <b id="blurVal">0px</b></label><input id="blur" type="range" min="0" max="12" value="0"></div>
+    <div class="control"><label>Grayscale <b id="grayVal">0%</b></label><input id="grayscale" type="range" min="0" max="100" value="0"></div>
+    <div class="control"><label>Sepia <b id="sepiaVal">0%</b></label><input id="sepia" type="range" min="0" max="100" value="0"></div>
+   </div>
+   <div id="tab-transform" class="hidden">
+    <div class="control"><label>Aspect ratio</label><select id="ratio"><option value="source">Original source</option><option value="9/16">9:16 · Reels</option><option value="16/9">16:9 · YouTube</option><option value="1/1">1:1 · Square</option><option value="4/5">4:5 · Portrait feed</option></select></div>
+    <div class="control"><label>Preview fit</label><select id="objectFit"><option value="contain">Fit (show full frame)</option><option value="cover">Fill (crop edges)</option></select></div>
+    <div class="control"><label>Scale <b id="scaleVal">100%</b></label><input id="scale" type="range" min="50" max="200" value="100"></div>
+    <div class="control"><label>Rotate</label><select id="rotate"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></div>
+   </div>
+   <div id="tab-text" class="hidden">
+    <div class="control"><label>Overlay text</label><input id="overlayText" type="text" placeholder="Type your title or lyrics"></div>
+    <div class="control"><label>Text size <b id="fontSizeVal">42px</b></label><input id="fontSize" type="range" min="14" max="100" value="42"></div>
+    <div class="control"><label>Vertical position <b id="textYVal">80%</b></label><input id="textY" type="range" min="5" max="95" value="80"></div>
+    <div class="control"><label>Text colour</label><input id="textColor" type="text" value="#ffffff" placeholder="#ffffff"></div>
+    <div class="control"><label>Text background</label><select id="textBg"><option value="none">None</option><option value="dark">Dark translucent</option><option value="light">Light translucent</option></select></div>
+   </div>
+   <div id="tab-audio" class="hidden">
+    <div class="control"><label>Original audio volume <b id="volumeVal">100%</b></label><input id="volume" type="range" min="0" max="100" value="100"></div>
+    <div class="control"><label>Mute original audio</label><select id="mute"><option value="no">Audio on</option><option value="yes">Mute</option></select></div>
+    <p class="muted" style="font-size:12px">This foundation keeps the source audio track during supported browser exports. Extra audio tracks and advanced mixing will be added in later modules.</p>
+   </div>
+   <div class="section"><h3>Project actions</h3><div class="grid2"><button id="snapshotBtn">Save snapshot</button><button id="clearText">Clear text</button></div><div class="status" id="toolStatus">Ready. Import a video to begin.</div></div>
+  </div>
+  <div class="panel">
+   <div class="panel-head"><h2>Export settings</h2><span class="pill">Browser encoder</span></div>
+   <div class="control"><label>Output quality</label><select id="quality"><option value="high">High · 1080p max canvas</option><option value="medium">Balanced · 720p max canvas</option><option value="low">Fast · 480p max canvas</option></select></div>
+   <div class="control"><label>Frame rate</label><select id="fps"><option value="30">30 FPS</option><option value="24">24 FPS</option><option value="60">60 FPS (device permitting)</option></select></div>
+   <div class="status" id="exportStatus">Export uses your browser's MediaRecorder support. Keep this tab open while rendering.</div>
+  </div>
+ </aside>
+</main>
+<div class="footer">VidoAI Studio PRO MAX · Local browser workspace · Your selected media stays on this device</div>
+</div>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id), video=$('video');
+let sourceUrl=null, exporting=false, projectName='Untitled Project';
+const ids=['brightness','contrast','saturation','blur','grayscale','sepia','scale','rotate','ratio','objectFit','overlayText','fontSize','textY','textColor','textBg','volume','mute','trimStart','trimEnd','quality','fps'];
+function time(s){if(!Number.isFinite(s))s=0;let m=Math.floor(s/60),sec=(s%60).toFixed(2).padStart(5,'0');return String(m).padStart(2,'0')+':'+sec}
+function status(t){$('toolStatus').textContent=t}
+function applyPreview(){
+ const f=`brightness(${$('brightness').value}%) contrast(${$('contrast').value}%) saturate(${$('saturation').value}%) blur(${$('blur').value}px) grayscale(${$('grayscale').value}%) sepia(${$('sepia').value}%)`;
+ video.style.filter=f;video.style.transform=`scale(${$('scale').value/100}) rotate(${$('rotate').value}deg)`;video.style.objectFit=$('objectFit').value;
+ ['brightness','contrast','saturation','blur','grayscale','sepia','scale','fontSize','textY','volume'].forEach(id=>{let v=$(id),out=$(id+'Val');if(out)out.textContent=v.value+(id==='blur'?'px':id==='fontSize'?'px':'%')});
+ video.volume=+$('volume').value/100;video.muted=$('mute').value==='yes';
+ const r=$('ratio').value;if(r==='source'){if(video.videoWidth&&video.videoHeight)$('previewWrap').style.aspectRatio=video.videoWidth+'/'+video.videoHeight;}else $('previewWrap').style.aspectRatio=r;
+}
+function loadFile(file){
+ if(!file)return;if(!file.type.startsWith('video/')){status('Please choose a supported video file.');return}
+ if(sourceUrl)URL.revokeObjectURL(sourceUrl);sourceUrl=URL.createObjectURL(file);video.src=sourceUrl;video.load();
+ $('empty').classList.remove('hidden');$('mediaState').textContent='Loading media…';$('clip').textContent=file.name;
+ video.onloadedmetadata=()=>{$('empty').classList.add('hidden');$('mediaState').textContent=video.videoWidth+' × '+video.videoHeight;$('duration').textContent=time(video.duration);$('timelineDuration').textContent=time(video.duration);$('trimStart').value=0;$('trimEnd').value=video.duration.toFixed(2);$('scrub').max=video.duration;applyPreview();status('Loaded '+file.name)};
+ video.onerror=()=>status('This video format could not be decoded by this browser.');
+}
+$('importBtn').onclick=()=>$('fileInput').click();$('fileInput').onchange=e=>loadFile(e.target.files[0]);
+$('playBtn').onclick=()=>{if(!video.src)return status('Import a video first.');if(video.paused)video.play();else video.pause()};
+video.onplay=()=>$('playBtn').textContent='Ⅱ Pause';video.onpause=()=>$('playBtn').textContent='▶ Play';
+video.ontimeupdate=()=>{$('currentTime').textContent=time(video.currentTime);$('scrub').value=video.currentTime};
+$('scrub').oninput=e=>{if(video.src)video.currentTime=+e.target.value};
+ids.forEach(id=>{let el=$(id);if(!el)return;el.addEventListener('input',applyPreview);el.addEventListener('change',applyPreview)});
+$('ratio').onchange=applyPreview;$('objectFit').onchange=applyPreview;
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['adjust','transform','text','audio'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==b.dataset.tab))});
+$('setIn').onclick=()=>{$('trimStart').value=video.currentTime.toFixed(2);validateTrim()};
+$('setOut').onclick=()=>{$('trimEnd').value=video.currentTime.toFixed(2);validateTrim()};
+$('goIn').onclick=()=>{video.currentTime=+$('trimStart').value||0};
+$('goOut').onclick=()=>{video.currentTime=+$('trimEnd').value||0};
+$('trimStart').onchange=validateTrim;$('trimEnd').onchange=validateTrim;
+function validateTrim(){let a=+$('trimStart').value,b=+$('trimEnd').value,d=video.duration;if(a<0||b>d||b<=a){$('trimStatus').textContent='Invalid range. End must be after start and within the video.';$('trimStatus').style.color='#ff9aab'}else{$('trimStatus').textContent='Export range: '+time(a)+' → '+time(b)+' ('+(b-a).toFixed(2)+' seconds)';$('trimStatus').style.color=''}}
+$('resetBtn').onclick=()=>{['brightness','contrast','saturation'].forEach(id=>$(id).value=100);['blur','grayscale','sepia'].forEach(id=>$(id).value=0);$('scale').value=100;$('rotate').value='0';applyPreview();status('Adjustments reset.')};
+$('clearText').onclick=()=>{$('overlayText').value='';status('Text overlay cleared.')};
+$('fitBtn').onclick=()=>{$('objectFit').value='contain';$('scale').value=100;applyPreview()};
+$('newProject').onclick=()=>{if(!confirm('Start a new project? Unsaved changes may be lost.'))return;video.pause();$('fileInput').value='';video.removeAttribute('src');video.load();if(sourceUrl)URL.revokeObjectURL(sourceUrl);sourceUrl=null;$('mediaState').textContent='No media loaded';$('empty').classList.remove('hidden');$('clip').textContent='VIDEO CLIP · Import media to start';status('New project ready.')};
+function projectData(){let p={app:'VidoAI Studio PRO MAX',version:1,name:projectName,settings:{}};ids.forEach(id=>p.settings[id]=$(id).value);p.position=video.currentTime||0;return p}
+$('saveProject').onclick=()=>{try{let blob=new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vidoai-project.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);status('Project settings saved as JSON. Keep the original video file with this project.')}catch(e){status('Could not save project: '+e.message)}};
+$('snapshotBtn').onclick=()=>$('saveProject').click();
+function drawFrame(ctx,w,h){
+ const vw=video.videoWidth,vh=video.videoHeight;if(!vw||!vh)return;
+ let targetRatio=$('ratio').value,tw=w,th=h;
+ if(targetRatio!=='source'){let [rw,rh]=targetRatio.split('/').map(Number);if(w/h>rw/rh)tw=h*rw/rh;else th=w*rh/rw}
+ ctx.fillStyle='#05060b';ctx.fillRect(0,0,w,h);let fit=$('objectFit').value,scale=+$('scale').value/100;
+ let base=Math.min(tw/vw,th/vh);if(fit==='cover')base=Math.max(tw/vw,th/vh);let dw=vw*base*scale,dh=vh*base*scale;
+ ctx.save();ctx.translate(w/2,h/2);ctx.rotate(+$('rotate').value*Math.PI/180);ctx.filter=`brightness(${$('brightness').value}%) contrast(${$('contrast').value}%) saturate(${$('saturation').value}%) blur(${$('blur').value}px) grayscale(${$('grayscale').value}%) sepia(${$('sepia').value}%)`;ctx.drawImage(video,-dw/2,-dh/2,dw,dh);ctx.filter='none';
+ let txt=$('overlayText').value;if(txt){let fs=Math.max(14,+$('fontSize').value*w/900);ctx.font=`700 ${fs}px system-ui,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';let y=h*(+$('textY').value/100);let maxW=w*.88;let words=txt.split(/\s+/),lines=[],line='';for(let word of words){let test=line?line+' '+word:word;if(ctx.measureText(test).width>maxW&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line);let lineH=fs*1.25;let bg=$('textBg').value;if(bg!=='none'){let widest=Math.max(...lines.map(l=>ctx.measureText(l).width));ctx.fillStyle=bg==='dark'?'rgba(0,0,0,.48)':'rgba(255,255,255,.55)';ctx.fillRect(w/2-widest/2-15,y-lines.length*lineH/2-7,widest+30,lines.length*lineH+14)}ctx.fillStyle=$('textColor').value||'#fff';ctx.shadowColor='#000';ctx.shadowBlur=5;lines.forEach((l,i)=>ctx.fillText(l,w/2,y+(i-(lines.length-1)/2)*lineH,maxW))}
+ ctx.restore();
+}
+async function seek(t){return new Promise((resolve,reject)=>{if(Math.abs(video.currentTime-t)<.03)return resolve();let done=()=>{video.removeEventListener('seeked',done);resolve()};video.addEventListener('seeked',done,{once:true});video.currentTime=t;setTimeout(()=>{video.removeEventListener('seeked',done);resolve()},2500)})}
+$('exportBtn').onclick=async()=>{
+ if(exporting)return;if(!video.src)return status('Import a video before exporting.');
+ let start=+$('trimStart').value,end=+$('trimEnd').value;if(!(start>=0&&end>start&&end<=video.duration)){status('Fix the trim range before exporting.');return}
+ if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream){status('This browser does not support canvas video export. Try a current Chrome browser.');return}
+ exporting=true;$('exportBtn').disabled=true;$('exportStatus').textContent='Preparing export… Keep this page open.';
+ let oldTime=video.currentTime,wasPlaying=!video.paused;video.pause();
+ try{
+  let maxH=$('quality').value==='high'?1080:$('quality').value==='medium'?720:480;
+  let ratio=$('ratio').value==='source'?video.videoWidth/video.videoHeight:(()=>{let [a,b]=$('ratio').value.split('/').map(Number);return a/b})();
+  let h=Math.min(maxH,video.videoHeight);h=Math.round(h/2)*2;let w=Math.round(h*ratio/2)*2;if(w>1920){w=1920;h=Math.round(w/ratio/2)*2}
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');const fps=+$('fps').value;const stream=canvas.captureStream(fps);
+  let audioStream=null;try{audioStream=video.captureStream?video.captureStream():video.mozCaptureStream?video.mozCaptureStream():null;if(audioStream)audioStream.getAudioTracks().forEach(t=>stream.addTrack(t))}catch(e){}
+  const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x))||'';
+  if(!mime)throw new Error('No supported WebM recorder format found.');
+  let recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:$('quality').value==='high'?8000000: $('quality').value==='medium'?4500000:1800000});
+  let chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  let stopped=new Promise((resolve,reject)=>{recorder.onstop=resolve;recorder.onerror=e=>reject(e.error||new Error('Recorder failed'))});
+  await seek(start);video.volume=+$('volume').value/100;video.muted=$('mute').value==='yes';recorder.start(500);await video.play();
+  let draw=()=>{if(!exporting)return;drawFrame(ctx,w,h);if(video.currentTime>=end||video.ended){video.pause();if(recorder.state!=='inactive')recorder.stop();return}requestAnimationFrame(draw)};draw();
+  let ticker=setInterval(()=>{$('exportStatus').textContent='Rendering '+Math.min(100,Math.round((video.currentTime-start)/(end-start)*100))+'% · '+time(video.currentTime)+' / '+time(end)},400);
+  await stopped;clearInterval(ticker);exporting=false;
+  let blob=new Blob(chunks,{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='VidoAI-Export.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+  $('exportStatus').textContent='Export complete · '+(blob.size/1048576).toFixed(1)+' MB · WebM';status('Video exported. If Android does not save directly to Gallery, check Downloads and move/share it from there.');
+  stream.getTracks().forEach(t=>t.stop());
+ }catch(e){exporting=false;$('exportStatus').textContent='Export failed: '+e.message;status('Export failed. Try a shorter clip or lower quality.')}
+ finally{$('exportBtn').disabled=false;video.pause();await seek(Math.min(oldTime,video.duration||0));if(wasPlaying)video.play();applyPreview()}
+};
+applyPreview();validateTrim();
+})();
+</script>
+</body>
+</html>
