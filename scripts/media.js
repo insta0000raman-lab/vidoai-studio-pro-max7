@@ -2,40 +2,132 @@
 (() => {
   "use strict";
 
+  const DB_NAME = "VYORA_MEDIA_DATABASE";
+  const DB_VERSION = 1;
+  const STORE_NAME = "assets";
+
   const Media = {
     assets: new Map(),
     activeVideo: null,
     activeAudio: null,
     previewElement: null,
     objectUrls: new Set(),
+    db: null,
+    ready: null,
 
     createId() {
-      return (
-        "media_" +
-        Date.now().toString(36) +
-        "_" +
-        Math.random().toString(36).slice(2, 8)
-      );
+      return "media_" + Date.now().toString(36) +
+        "_" + Math.random().toString(36).slice(2, 9);
     },
 
-    isVideo(file) {
-      return Boolean(
-        file &&
-        (
-          file.type.startsWith("video/") ||
-          /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(file.name)
-        )
-      );
+    openDatabase() {
+      if (this.db) return Promise.resolve(this.db);
+
+      if (!("indexedDB" in window)) {
+        return Promise.reject(new Error("IndexedDB is not supported"));
+      }
+
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const store = db.createObjectStore(STORE_NAME, {
+              keyPath: "id"
+            });
+            store.createIndex("type", "type", { unique: false });
+          }
+        };
+
+        request.onsuccess = () => {
+          this.db = request.result;
+          resolve(this.db);
+        };
+
+        request.onerror = () => reject(request.error);
+      });
     },
 
-    isAudio(file) {
-      return Boolean(
-        file &&
-        (
-          file.type.startsWith("audio/") ||
-          /\.(mp3|wav|aac|m4a|ogg|flac|opus)$/i.test(file.name)
-        )
+    async databaseRequest(mode, action) {
+      const db = await this.openDatabase();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, mode);
+        const store = transaction.objectStore(STORE_NAME);
+
+        let request;
+
+        try {
+          request = action(store);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+
+        if (request) {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        } else {
+          transaction.oncomplete = () => resolve(true);
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error);
+        }
+      });
+    },
+
+    async saveAsset(asset) {
+      const record = {
+        id: asset.id,
+        type: asset.type,
+        name: asset.name,
+        size: asset.size,
+        sizeText: asset.sizeText,
+        mimeType: asset.mimeType,
+        duration: asset.duration,
+        width: asset.width || 0,
+        height: asset.height || 0,
+        aspectRatio: asset.aspectRatio || 0,
+        lastModified: asset.lastModified || 0,
+        file: asset.file
+      };
+
+      await this.databaseRequest("readwrite", store =>
+        store.put(record)
       );
+
+      return true;
+    },
+
+    async restoreAssets() {
+      try {
+        const records = await this.databaseRequest("readonly", store =>
+          store.getAll()
+        );
+
+        for (const record of records || []) {
+          if (!record.file) continue;
+
+          const url = this.createURL(record.file);
+
+          this.assets.set(record.id, {
+            ...record,
+            url,
+            file: record.file,
+            restored: true
+          });
+        }
+
+        this.emit("assets-restored", {
+          assets: this.getAllAssets()
+        });
+
+        return this.getAllAssets();
+      } catch (error) {
+        console.error("VYORA media restore failed:", error);
+        return [];
+      }
     },
 
     createURL(file) {
@@ -52,205 +144,210 @@
     },
 
     formatTime(seconds) {
-      if (!Number.isFinite(seconds) || seconds < 0) {
-        seconds = 0;
-      }
-
+      seconds = Math.max(0, Number(seconds) || 0);
       const minutes = Math.floor(seconds / 60);
-      const remaining = Math.floor(seconds % 60);
-      const centiseconds = Math.floor((seconds % 1) * 100);
+      const secs = Math.floor(seconds % 60);
+      const hundredths = Math.floor((seconds % 1) * 100);
 
-      return (
-        String(minutes).padStart(2, "0") +
-        ":" +
-        String(remaining).padStart(2, "0") +
-        "." +
-        String(centiseconds).padStart(2, "0")
-      );
+      return String(minutes).padStart(2, "0") + ":" +
+        String(secs).padStart(2, "0") + "." +
+        String(hundredths).padStart(2, "0");
     },
 
-    formatFileSize(bytes) {
-      if (!Number.isFinite(bytes) || bytes <= 0) {
-        return "0 B";
+    formatSize(bytes) {
+      bytes = Number(bytes) || 0;
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) {
+        return (bytes / 1024).toFixed(1) + " KB";
       }
+      if (bytes < 1024 * 1024 * 1024) {
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+      }
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    },
 
-      const units = ["B", "KB", "MB", "GB"];
-      const index = Math.min(
-        Math.floor(Math.log(bytes) / Math.log(1024)),
-        units.length - 1
-      );
-
-      return (
-        (bytes / Math.pow(1024, index)).toFixed(2) +
-        " " +
-        units[index]
+    isVideo(file) {
+      return !!file && (
+        file.type.startsWith("video/") ||
+        /\.(mp4|mov|webm|m4v|3gp|mkv)$/i.test(file.name)
       );
     },
 
-    loadVideo(file) {
+    isAudio(file) {
+      return !!file && (
+        file.type.startsWith("audio/") ||
+        /\.(mp3|wav|aac|m4a|ogg|flac)$/i.test(file.name)
+      );
+    },
+
+    readVideoMetadata(file, url) {
       return new Promise((resolve, reject) => {
-        if (!this.isVideo(file)) {
-          reject(new Error("Please select a valid video file."));
-          return;
-        }
-
-        const url = this.createURL(file);
         const video = document.createElement("video");
-
         video.preload = "metadata";
         video.muted = true;
         video.playsInline = true;
+        video.src = url;
 
-        let completed = false;
-
-        const cleanupListeners = () => {
-          video.removeEventListener("loadedmetadata", onLoaded);
-          video.removeEventListener("error", onError);
+        const cleanup = () => {
+          video.onloadedmetadata = null;
+          video.onerror = null;
         };
 
-        const onLoaded = () => {
-          if (completed) return;
-          completed = true;
-
-          cleanupListeners();
-
-          if (
-            !Number.isFinite(video.duration) ||
-            video.duration <= 0
-          ) {
-            this.revokeURL(url);
-            reject(new Error("Video duration could not be read."));
-            return;
-          }
-
-          const asset = {
-            id: this.createId(),
-            type: "video",
-            name: file.name,
-            size: file.size,
-            sizeText: this.formatFileSize(file.size),
-            mimeType: file.type || "video/unknown",
-            url,
-            duration: video.duration,
-            width: video.videoWidth,
-            height: video.videoHeight,
-            aspectRatio:
-              video.videoWidth / video.videoHeight,
-            lastModified: file.lastModified,
-            file
+        video.onloadedmetadata = () => {
+          const result = {
+            duration: Number.isFinite(video.duration)
+              ? video.duration : 0,
+            width: video.videoWidth || 0,
+            height: video.videoHeight || 0
           };
 
-          this.assets.set(asset.id, asset);
-
-          resolve({ ...asset });
+          cleanup();
+          video.removeAttribute("src");
+          video.load();
+          resolve(result);
         };
 
-        const onError = () => {
-          if (completed) return;
-          completed = true;
-
-          cleanupListeners();
-          this.revokeURL(url);
-
-          reject(
-            new Error(
-              "Video could not be opened. Try another video format."
-            )
-          );
+        video.onerror = () => {
+          cleanup();
+          reject(new Error("Video metadata could not be read"));
         };
-
-        video.addEventListener("loadedmetadata", onLoaded);
-        video.addEventListener("error", onError);
-
-        video.src = url;
-        video.load();
       });
     },
 
-    loadAudio(file) {
+    readAudioMetadata(file, url) {
       return new Promise((resolve, reject) => {
-        if (!this.isAudio(file)) {
-          reject(new Error("Please select a valid audio file."));
-          return;
-        }
-
-        const url = this.createURL(file);
         const audio = document.createElement("audio");
-
         audio.preload = "metadata";
-
-        let completed = false;
-
-        const cleanupListeners = () => {
-          audio.removeEventListener("loadedmetadata", onLoaded);
-          audio.removeEventListener("error", onError);
-        };
-
-        const onLoaded = () => {
-          if (completed) return;
-          completed = true;
-
-          cleanupListeners();
-
-          const asset = {
-            id: this.createId(),
-            type: "audio",
-            name: file.name,
-            size: file.size,
-            sizeText: this.formatFileSize(file.size),
-            mimeType: file.type || "audio/unknown",
-            url,
-            duration: Number.isFinite(audio.duration)
-              ? audio.duration
-              : 0,
-            lastModified: file.lastModified,
-            file
-          };
-
-          this.assets.set(asset.id, asset);
-
-          resolve({ ...asset });
-        };
-
-        const onError = () => {
-          if (completed) return;
-          completed = true;
-
-          cleanupListeners();
-          this.revokeURL(url);
-
-          reject(
-            new Error(
-              "Audio could not be opened. Try another audio file."
-            )
-          );
-        };
-
-        audio.addEventListener("loadedmetadata", onLoaded);
-        audio.addEventListener("error", onError);
-
         audio.src = url;
-        audio.load();
+
+        audio.onloadedmetadata = () => {
+          const duration = Number.isFinite(audio.duration)
+            ? audio.duration : 0;
+
+          audio.removeAttribute("src");
+          audio.load();
+          resolve({ duration });
+        };
+
+        audio.onerror = () => {
+          reject(new Error("Audio metadata could not be read"));
+        };
       });
+    },
+
+    async loadVideo(file) {
+      if (!this.isVideo(file)) {
+        throw new Error("Please select a supported video file");
+      }
+
+      const url = this.createURL(file);
+
+      try {
+        const metadata = await this.readVideoMetadata(file, url);
+
+        const asset = {
+          id: this.createId(),
+          type: "video",
+          name: file.name,
+          size: file.size,
+          sizeText: this.formatSize(file.size),
+          mimeType: file.type || "video/mp4",
+          url,
+          file,
+          duration: metadata.duration,
+          width: metadata.width,
+          height: metadata.height,
+          aspectRatio: metadata.height
+            ? metadata.width / metadata.height : 0,
+          lastModified: file.lastModified || 0
+        };
+
+        await this.saveAsset(asset);
+        this.assets.set(asset.id, asset);
+
+        this.emit("asset-added", { asset: this.publicAsset(asset) });
+        return this.publicAsset(asset);
+      } catch (error) {
+        this.revokeURL(url);
+        throw error;
+      }
+    },
+
+    async loadAudio(file) {
+      if (!this.isAudio(file)) {
+        throw new Error("Please select a supported audio file");
+      }
+
+      const url = this.createURL(file);
+
+      try {
+        const metadata = await this.readAudioMetadata(file, url);
+
+        const asset = {
+          id: this.createId(),
+          type: "audio",
+          name: file.name,
+          size: file.size,
+          sizeText: this.formatSize(file.size),
+          mimeType: file.type || "audio/mpeg",
+          url,
+          file,
+          duration: metadata.duration,
+          width: 0,
+          height: 0,
+          aspectRatio: 0,
+          lastModified: file.lastModified || 0
+        };
+
+        await this.saveAsset(asset);
+        this.assets.set(asset.id, asset);
+
+        this.emit("asset-added", { asset: this.publicAsset(asset) });
+        return this.publicAsset(asset);
+      } catch (error) {
+        this.revokeURL(url);
+        throw error;
+      }
+    },
+
+    publicAsset(asset) {
+      if (!asset) return null;
+
+      return {
+        id: asset.id,
+        type: asset.type,
+        name: asset.name,
+        size: asset.size,
+        sizeText: asset.sizeText,
+        mimeType: asset.mimeType,
+        url: asset.url,
+        duration: asset.duration,
+        width: asset.width,
+        height: asset.height,
+        aspectRatio: asset.aspectRatio,
+        lastModified: asset.lastModified,
+        file: asset.file,
+        restored: !!asset.restored
+      };
     },
 
     getAsset(id) {
-      const asset = this.assets.get(id);
-      return asset ? { ...asset } : null;
+      return this.publicAsset(this.assets.get(id));
     },
 
     getAllAssets() {
-      return Array.from(this.assets.values()).map(asset => ({
-        ...asset
-      }));
+      return Array.from(this.assets.values()).map(asset =>
+        this.publicAsset(asset)
+      );
     },
 
-    removeAsset(id) {
+    async removeAsset(id) {
       const asset = this.assets.get(id);
       if (!asset) return false;
 
       if (this.activeVideo?.assetId === id) {
         this.stopVideo();
+        this.activeVideo = null;
       }
 
       if (this.activeAudio?.assetId === id) {
@@ -260,352 +357,225 @@
       this.revokeURL(asset.url);
       this.assets.delete(id);
 
-      this.emit("asset-removed", { id });
+      try {
+        await this.databaseRequest("readwrite", store =>
+          store.delete(id)
+        );
+      } catch (error) {
+        console.error("VYORA media delete failed:", error);
+      }
 
+      this.emit("asset-removed", { id });
       return true;
     },
 
     attachPreview(element) {
       if (!(element instanceof HTMLVideoElement)) {
-        throw new Error("Preview needs a video element.");
+        throw new Error("Preview must be a video element");
       }
 
       this.previewElement = element;
-
-      element.playsInline = true;
-      element.preload = "auto";
-      element.controls = false;
-
       return element;
     },
 
-    async openVideo(assetId, videoElement) {
+    async openVideo(assetId, videoElement = this.previewElement) {
       const asset = this.assets.get(assetId);
 
       if (!asset || asset.type !== "video") {
-        throw new Error("Video asset not found.");
+        throw new Error("Video asset not found");
       }
 
-      const video = videoElement || this.previewElement;
-
-      if (!(video instanceof HTMLVideoElement)) {
-        throw new Error("Video preview element is missing.");
+      if (!(videoElement instanceof HTMLVideoElement)) {
+        throw new Error("Preview video element missing");
       }
 
-      this.previewElement = video;
+      this.pauseVideo();
 
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-
-      video.src = asset.url;
-      video.muted = true;
-      video.playsInline = true;
+      videoElement.pause();
+      videoElement.src = asset.url;
+      videoElement.preload = "metadata";
+      videoElement.playsInline = true;
+      videoElement.muted = true;
 
       await new Promise((resolve, reject) => {
-        const onReady = () => {
-          cleanup();
+        if (videoElement.readyState >= 1) {
           resolve();
-        };
+          return;
+        }
 
-        const onError = () => {
-          cleanup();
-          reject(new Error("Unable to load video preview."));
-        };
-
-        const cleanup = () => {
-          video.removeEventListener("loadedmetadata", onReady);
-          video.removeEventListener("error", onError);
-        };
-
-        video.addEventListener("loadedmetadata", onReady, {
-          once: true
-        });
-
-        video.addEventListener("error", onError, {
-          once: true
-        });
-
-        video.load();
+        videoElement.onloadedmetadata = () => resolve();
+        videoElement.onerror = () =>
+          reject(new Error("Could not open video preview"));
+        videoElement.load();
       });
 
+      this.previewElement = videoElement;
       this.activeVideo = {
         assetId,
-        element: video
+        element: videoElement
       };
 
       this.emit("video-opened", {
-        assetId,
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight
+        asset: this.publicAsset(asset)
       });
 
-      return video;
+      return videoElement;
     },
 
     playVideo() {
-      const video = this.previewElement;
+      const video = this.activeVideo?.element;
+      if (!video) return Promise.resolve(false);
 
-      if (!video || !video.src) return false;
-
-      const promise = video.play();
-
-      if (promise && typeof promise.catch === "function") {
-        promise.catch(error => {
-          this.emit("playback-error", {
-            message: error.message
-          });
-        });
-      }
-
-      return true;
+      return video.play().then(() => true).catch((error) => {
+        console.warn("Video playback blocked:", error);
+        return false;
+      });
     },
 
     pauseVideo() {
-      if (!this.previewElement) return false;
-
-      this.previewElement.pause();
-      return true;
+      const video = this.activeVideo?.element;
+      if (video) video.pause();
     },
 
     togglePlayback() {
-      if (!this.previewElement) return false;
+      const video = this.activeVideo?.element;
+      if (!video) return Promise.resolve(false);
 
-      if (this.previewElement.paused) {
-        return this.playVideo();
-      }
-
-      return this.pauseVideo();
+      return video.paused ? this.playVideo() : (
+        this.pauseVideo(), Promise.resolve(true)
+      );
     },
 
     stopVideo() {
-      if (!this.previewElement) return false;
+      const video = this.activeVideo?.element;
+      if (!video) return;
 
-      this.previewElement.pause();
-
+      video.pause();
       try {
-        this.previewElement.currentTime = 0;
-      } catch {}
+        video.currentTime = 0;
+      } catch (_) {}
+    },
 
-      this.activeVideo = null;
+    seek(seconds) {
+      const video = this.activeVideo?.element;
+      if (!video) return false;
+
+      const time = Math.max(0, Number(seconds) || 0);
+      video.currentTime = Math.min(
+        time,
+        Number.isFinite(video.duration) ? video.duration : time
+      );
       return true;
     },
 
-    seek(time) {
-      const video = this.previewElement;
-
-      if (!video || !Number.isFinite(Number(time))) {
-        return false;
-      }
-
-      const duration = Number.isFinite(video.duration)
-        ? video.duration
-        : 0;
-
-      const target = Math.max(
-        0,
-        Math.min(Number(time), duration)
-      );
-
-      try {
-        video.currentTime = target;
-        this.emit("seek", { time: target });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-
     getPlaybackInfo() {
-      const video = this.previewElement;
-
-      if (!video) return null;
+      const video = this.activeVideo?.element;
+      if (!video) {
+        return {
+          currentTime: 0,
+          duration: 0,
+          paused: true,
+          ended: false
+        };
+      }
 
       return {
         currentTime: video.currentTime || 0,
-        duration: Number.isFinite(video.duration)
-          ? video.duration
-          : 0,
+        duration: Number.isFinite(video.duration) ? video.duration : 0,
         paused: video.paused,
-        ended: video.ended,
-        muted: video.muted,
-        volume: video.volume,
-        playbackRate: video.playbackRate,
-        width: video.videoWidth,
-        height: video.videoHeight
+        ended: video.ended
       };
     },
 
     setPlaybackRate(rate) {
-      if (!this.previewElement) return false;
+      const video = this.activeVideo?.element;
+      if (!video) return false;
 
-      const value = Number(rate);
-
-      if (!Number.isFinite(value) || value < 0.25 || value > 4) {
-        return false;
-      }
-
-      this.previewElement.playbackRate = value;
+      video.playbackRate = Math.max(0.25, Math.min(4, Number(rate) || 1));
       return true;
     },
 
     setPreviewVolume(volume) {
-      if (!this.previewElement) return false;
+      const video = this.activeVideo?.element;
+      if (!video) return false;
 
-      const value = Number(volume);
-
-      if (!Number.isFinite(value)) return false;
-
-      this.previewElement.volume = Math.max(
-        0,
-        Math.min(1, value)
-      );
-
+      video.volume = Math.max(0, Math.min(1, Number(volume) || 0));
       return true;
     },
 
     setPreviewMuted(muted) {
-      if (!this.previewElement) return false;
+      const video = this.activeVideo?.element;
+      if (!video) return false;
 
-      this.previewElement.muted = Boolean(muted);
+      video.muted = !!muted;
       return true;
     },
 
-    setCrop(element, crop = {}) {
-      if (!element) return false;
+    setCrop(clipId, crop) {
+      const project = window.VYORAProject;
+      if (!project) return false;
 
-      const top = this.validCrop(crop.top);
-      const bottom = this.validCrop(crop.bottom);
-      const left = this.validCrop(crop.left);
-      const right = this.validCrop(crop.right);
-
-      element.style.objectFit = "cover";
-      element.style.clipPath =
-        `inset(${top}% ${right}% ${bottom}% ${left}%)`;
-
-      return true;
+      return project.updateClip(clipId, {
+        crop: {
+          top: Math.max(0, Number(crop.top) || 0),
+          right: Math.max(0, Number(crop.right) || 0),
+          bottom: Math.max(0, Number(crop.bottom) || 0),
+          left: Math.max(0, Number(crop.left) || 0)
+        }
+      });
     },
 
-    validCrop(value) {
-      const number = Number(value);
+    validCrop(crop = {}) {
+      const values = [
+        crop.top, crop.right, crop.bottom, crop.left
+      ].map(value => Number(value) || 0);
 
-      if (!Number.isFinite(number)) return 0;
-
-      return Math.max(0, Math.min(95, number));
+      return values.every(value => value >= 0 && value < 100) &&
+        values[0] + values[2] < 100 &&
+        values[1] + values[3] < 100;
     },
 
-    resetCrop(element) {
-      if (!element) return false;
-
-      element.style.clipPath = "none";
-      element.style.objectFit = "contain";
-
-      return true;
+    resetCrop(clipId) {
+      return this.setCrop(clipId, {
+        top: 0, right: 0, bottom: 0, left: 0
+      });
     },
 
-    getCanvasSize(width, height, maxSize = 4096) {
-      let w = Math.max(1, Number(width) || 1080);
-      let h = Math.max(1, Number(height) || 1920);
-
-      const largest = Math.max(w, h);
-
-      if (largest > maxSize) {
-        const scale = maxSize / largest;
-        w *= scale;
-        h *= scale;
-      }
-
-      return {
-        width: Math.round(w),
-        height: Math.round(h)
+    getCanvasSize() {
+      const project = window.VYORAProject;
+      return project?.data?.canvas || {
+        width: 1080,
+        height: 1920,
+        ratio: "9:16"
       };
     },
 
     createPreviewCanvas(width, height) {
-      const size = this.getCanvasSize(width, height);
-
       const canvas = document.createElement("canvas");
-      canvas.width = size.width;
-      canvas.height = size.height;
-
-      const context = canvas.getContext("2d", {
-        alpha: false
-      });
-
-      if (!context) {
-        throw new Error("Canvas rendering is not supported.");
-      }
-
-      return {
-        canvas,
-        context,
-        width: size.width,
-        height: size.height
-      };
+      canvas.width = width || 1080;
+      canvas.height = height || 1920;
+      return canvas;
     },
 
-    drawVideoFrame(canvas, options = {}) {
-      const video = options.video || this.previewElement;
+    drawVideoFrame(context, video, width, height, crop = {}) {
+      if (!context || !video || video.readyState < 2) return false;
 
-      if (
-        !video ||
-        !canvas ||
-        video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-      ) {
-        return false;
-      }
+      const top = Math.max(0, Number(crop.top) || 0) / 100;
+      const right = Math.max(0, Number(crop.right) || 0) / 100;
+      const bottom = Math.max(0, Number(crop.bottom) || 0) / 100;
+      const left = Math.max(0, Number(crop.left) || 0) / 100;
 
-      const context = canvas.getContext("2d");
-      if (!context) return false;
+      const sx = video.videoWidth * left;
+      const sy = video.videoHeight * top;
+      const sw = video.videoWidth * (1 - left - right);
+      const sh = video.videoHeight * (1 - top - bottom);
 
-      const width = canvas.width;
-      const height = canvas.height;
-
-      const crop = options.crop || {};
-
-      const top = this.validCrop(crop.top) / 100;
-      const bottom = this.validCrop(crop.bottom) / 100;
-      const left = this.validCrop(crop.left) / 100;
-      const right = this.validCrop(crop.right) / 100;
-
-      const sourceX = video.videoWidth * left;
-      const sourceY = video.videoHeight * top;
-
-      const sourceWidth =
-        video.videoWidth * (1 - left - right);
-
-      const sourceHeight =
-        video.videoHeight * (1 - top - bottom);
-
-      if (sourceWidth <= 0 || sourceHeight <= 0) {
-        return false;
-      }
-
-      context.fillStyle = options.background || "#000000";
-      context.fillRect(0, 0, width, height);
-
-      const scale = Math.min(
-        width / sourceWidth,
-        height / sourceHeight
-      );
-
-      const drawWidth = sourceWidth * scale;
-      const drawHeight = sourceHeight * scale;
-
-      const x = (width - drawWidth) / 2;
-      const y = (height - drawHeight) / 2;
+      if (sw <= 0 || sh <= 0) return false;
 
       context.drawImage(
         video,
-        sourceX,
-        sourceY,
-        sourceWidth,
-        sourceHeight,
-        x,
-        y,
-        drawWidth,
-        drawHeight
+        sx, sy, sw, sh,
+        0, 0, width, height
       );
 
       return true;
@@ -616,126 +586,100 @@
 
       for (const file of Array.from(files || [])) {
         try {
-          let asset;
-
           if (this.isVideo(file)) {
-            asset = await this.loadVideo(file);
+            results.push(await this.loadVideo(file));
           } else if (this.isAudio(file)) {
-            asset = await this.loadAudio(file);
-          } else {
-            results.push({
-              success: false,
-              fileName: file.name,
-              error: "Unsupported media type."
-            });
-
-            continue;
+            results.push(await this.loadAudio(file));
           }
-
-          results.push({
-            success: true,
-            asset
-          });
         } catch (error) {
-          results.push({
-            success: false,
-            fileName: file.name,
-            error: error.message
-          });
+          console.error("Could not import:", file.name, error);
         }
       }
-
-      this.emit("files-loaded", {
-        count: results.filter(item => item.success).length,
-        results
-      });
 
       return results;
     },
 
     stopAudio() {
-      if (!this.activeAudio) return false;
+      if (!this.activeAudio) return;
 
       try {
         this.activeAudio.pause();
         this.activeAudio.currentTime = 0;
-      } catch {}
+      } catch (_) {}
 
       this.activeAudio = null;
-      return true;
     },
 
-    playAudio(assetId, options = {}) {
+    async playAudio(assetId, options = {}) {
       const asset = this.assets.get(assetId);
-
       if (!asset || asset.type !== "audio") {
-        throw new Error("Audio asset not found.");
+        throw new Error("Audio asset not found");
       }
 
       this.stopAudio();
 
       const audio = new Audio(asset.url);
+      audio.volume = Math.max(0, Math.min(
+        1, Number(options.volume ?? 1)
+      ));
 
-      audio.volume = Math.max(
-        0,
-        Math.min(1, Number(options.volume ?? 1))
-      );
-
-      audio.loop = Boolean(options.loop);
-      audio.currentTime = Math.max(
-        0,
-        Number(options.startTime) || 0
-      );
-
+      audio.loop = !!options.loop;
       this.activeAudio = audio;
-      audio.play().catch(error => {
-        this.emit("audio-playback-error", {
-          message: error.message
-        });
-      });
 
-      return audio;
+      try {
+        await audio.play();
+        return true;
+      } catch (error) {
+        this.activeAudio = null;
+        throw error;
+      }
     },
 
     emit(name, detail = {}) {
-      window.dispatchEvent(
-        new CustomEvent("vyora:media-" + name, {
-          detail
-        })
-      );
+      window.dispatchEvent(new CustomEvent("vyora:media-" + name, {
+        detail
+      }));
     },
 
-    destroy() {
+    async initialize() {
+      if (this.ready) return this.ready;
+
+      this.ready = (async () => {
+        await this.openDatabase();
+        await this.restoreAssets();
+        return true;
+      })();
+
+      return this.ready;
+    },
+
+    async destroy() {
       this.stopVideo();
       this.stopAudio();
 
-      this.assets.forEach(asset => {
-        this.revokeURL(asset.url);
-      });
+      for (const url of Array.from(this.objectUrls)) {
+        this.revokeURL(url);
+      }
 
       this.assets.clear();
-
-      this.objectUrls.forEach(url => {
-        URL.revokeObjectURL(url);
-      });
-
-      this.objectUrls.clear();
-
-      this.previewElement = null;
       this.activeVideo = null;
       this.activeAudio = null;
-
-      this.emit("destroyed");
+      this.previewElement = null;
     }
   };
 
   window.VYORAMedia = Media;
 
-  window.dispatchEvent(
-    new CustomEvent("vyora:media-ready", {
-      detail: { media: Media }
+  Media.initialize()
+    .then(() => {
+      window.dispatchEvent(new CustomEvent("vyora:media-ready"));
     })
-  );
+    .catch(error => {
+      console.error("VYORA media initialization failed:", error);
+      window.dispatchEvent(new CustomEvent("vyora:media-error", {
+        detail: { error: error.message }
+      }));
+    });
 
 })();
-          
+
