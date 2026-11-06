@@ -803,9 +803,13 @@
   $("#vyoraTimeline")
 );
 
-tools = window.VYORATools.init(
-  $("#vyoraToolsPanel")
-);
+tools = window.VYORATools;
+
+tools.init({
+  project: window.VYORAProject,
+  media: window.VYORAMedia,
+  container: $("#vyoraToolsPanel")
+});
 
     bindEditorEvents();
     bindExportEvents();
