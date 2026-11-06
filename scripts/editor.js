@@ -1,844 +1,728 @@
-(function () {
+(() => {
   "use strict";
 
-  const $ = (selector, root = document) =>
-    root.querySelector(selector);
+  const Editor = {
+    mount: null,
+    project: null,
+    media: null,
+    timeline: null,
+    tools: null,
+    preview: null,
+    initialized: false,
+    opening: false,
+    currentAssetId: null,
+    unsubscribe: null,
+    playbackTimer: null,
 
-  const $$ = (selector, root = document) =>
-    [...root.querySelectorAll(selector)];
+    $(selector) {
+      return this.mount?.querySelector(selector) || null;
+    },
 
-  let initialized = false;
-  let timeline = null;
-  let tools = null;
-  let currentVideoId = null;
+    toast(message) {
+      if (window.VYORA?.showToast) {
+        window.VYORA.showToast(message);
+        return;
+      }
 
-  function notify(message) {
-    if (window.VYORA && typeof window.VYORA.showToast === "function") {
-      window.VYORA.showToast(message);
-      return;
-    }
+      const toast = document.getElementById("toastRegion");
+      if (toast) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2500);
+      } else {
+        console.log("VYORA:", message);
+      }
+    },
 
-    const toast = $("#toastRegion");
+    getFile(detail = {}) {
+      const state = detail.state || {};
+      return (
+        detail.videoFile ||
+        detail.selectedFile ||
+        detail.file ||
+        state.videoFile ||
+        state.selectedFile ||
+        state.file ||
+        window.VYORA?.state?.videoFile ||
+        window.VYORA?.state?.selectedFile ||
+        null
+      );
+    },
 
-    if (toast) {
-      toast.textContent = message;
-      toast.classList.add("visible");
+    getSavedClip() {
+      const selected = this.project.data.selectedClipId;
+      if (selected) {
+        const found = this.project.findClip(selected);
+        if (found) return found.clip;
+      }
 
-      setTimeout(() => {
-        toast.classList.remove("visible");
-      }, 3000);
-    } else {
-      console.log("[VYORA]", message);
-    }
-  }
+      for (const track of this.project.data.tracks) {
+        const clip = track.clips.find(item => item.type === "video");
+        if (clip) return clip;
+      }
 
-  function createEditorHTML() {
-    return `
-      <div class="editor-workspace">
+      return null;
+    },
 
-        <header class="editor-topbar">
-          <div class="editor-brand">
-            <button class="editor-back" id="vyoraBack">
-              <i data-lucide="arrow-left"></i>
-            </button>
+    async init(detail = {}) {
+      if (this.opening) return;
+      this.opening = true;
 
-            <div>
-              <strong>VYORA</strong>
-              <span>STUDIO</span>
+      try {
+        this.mount = document.getElementById("editorMount");
+        this.project = window.VYORAProject;
+        this.media = window.VYORAMedia;
+
+        if (!this.mount || !this.project || !this.media) {
+          throw new Error("Editor modules are not ready. Refresh the page.");
+        }
+
+        await this.media.initialize();
+
+        if (!this.initialized) {
+          this.buildInterface();
+          this.connectModules();
+          this.bindEvents();
+          this.initialized = true;
+        }
+
+        this.showEditor();
+
+        const file = this.getFile(detail);
+
+        if (file) {
+          await this.importVideo(file);
+        } else {
+          await this.restoreProjectMedia();
+        }
+
+        this.renderProjectInfo();
+      } catch (error) {
+        console.error("VYORA editor initialization error:", error);
+        this.toast(error.message || "Editor could not open.");
+      } finally {
+        this.opening = false;
+      }
+    },
+
+    showEditor() {
+      document.querySelectorAll(".screen").forEach(screen => {
+        screen.classList.remove("active");
+      });
+
+      const screen = document.getElementById("editorScreen");
+      if (screen) screen.classList.add("active");
+
+      this.mount.style.display = "block";
+    },
+
+    buildInterface() {
+      this.mount.innerHTML = `
+        <div class="editor-workspace vyora-live-editor">
+
+          <header class="editor-topbar">
+            <button type="button" data-action="back">← Back</button>
+            <div class="editor-project-title">
+              <strong>VYORA Studio</strong>
+              <input id="vyoraProjectName"
+                type="text"
+                value="Untitled Project"
+                aria-label="Project name">
             </div>
-          </div>
+            <div class="editor-top-actions">
+              <button type="button" data-action="undo">Undo</button>
+              <button type="button" data-action="redo">Redo</button>
+              <button type="button" data-action="save">Save</button>
+            </div>
+          </header>
 
-          <div class="editor-project-name">
-            <span id="vyoraProjectName">Untitled Project</span>
-          </div>
+          <div class="editor-main-layout">
 
-          <div class="editor-top-actions">
-            <button id="vyoraUndo" title="Undo">
-              <i data-lucide="undo-2"></i>
-            </button>
-
-            <button id="vyoraRedo" title="Redo">
-              <i data-lucide="redo-2"></i>
-            </button>
-
-            <button id="vyoraSave" title="Save project">
-              <i data-lucide="save"></i>
-            </button>
-
-            <button class="export-main-button" id="vyoraExport">
-              <i data-lucide="download"></i>
-              Export
-            </button>
-          </div>
-        </header>
-
-        <main class="editor-main">
-
-          <section class="editor-preview-section">
-
-            <div class="preview-heading">
-              <span>PREVIEW</span>
-
-              <div class="preview-controls">
-                <button id="vyoraPreviewFit">
-                  <i data-lucide="maximize"></i>
-                </button>
+            <aside class="editor-tools-sidebar">
+              <div class="editor-tabs">
+                <button type="button" data-panel="media">Media</button>
+                <button type="button" data-panel="crop">Crop</button>
+                <button type="button" data-panel="trim">Trim</button>
+                <button type="button" data-panel="text">Text</button>
+                <button type="button" data-panel="audio">Audio</button>
+                <button type="button" data-panel="effects">Effects</button>
+                <button type="button" data-panel="transform">Adjust</button>
               </div>
-            </div>
 
-            <div class="preview-stage-wrap">
-              <div class="preview-stage" id="vyoraPreviewStage">
-                <canvas id="vyoraPreviewCanvas"
-                  width="1080"
-                  height="1920"></canvas>
+              <div id="vyoraToolsPanel" class="editor-properties-panel">
+                <p>Choose a tool to begin.</p>
+              </div>
+            </aside>
 
-                <div class="preview-empty" id="vyoraPreviewEmpty">
-                  <i data-lucide="clapperboard"></i>
-                  <strong>Preview is ready</strong>
+            <section class="editor-preview-section">
+              <div class="editor-preview-heading">
+                <span>Preview</span>
+                <span id="vyoraPreviewStatus">Ready</span>
+              </div>
+
+              <div class="editor-preview-stage">
+                <video id="vyoraPreviewVideo"
+                  playsinline
+                  preload="metadata"
+                  muted></video>
+
+                <div id="vyoraPreviewPlaceholder">
+                  <strong>VYORA Studio</strong>
                   <span>Your video will appear here</span>
                 </div>
               </div>
-            </div>
 
-            <div class="preview-playback">
-              <button id="vyoraPreviousFrame">
-                <i data-lucide="skip-back"></i>
-              </button>
-
-              <button id="vyoraPlay">
-                <i data-lucide="play"></i>
-              </button>
-
-              <button id="vyoraStop">
-                <i data-lucide="square"></i>
-              </button>
-
-              <button id="vyoraNextFrame">
-                <i data-lucide="skip-forward"></i>
-              </button>
-
-              <span id="vyoraTimeDisplay">00:00 / 00:00</span>
-            </div>
-
-          </section>
-
-          <section class="editor-tools-section">
-
-            <div class="editor-section-heading">
-              <strong>TOOLS</strong>
-            </div>
-
-            <div class="editor-tool-tabs">
-              <button class="editor-tab active" data-panel="media">
-                <i data-lucide="film"></i>
-                Media
-              </button>
-
-              <button class="editor-tab" data-panel="crop">
-                <i data-lucide="crop"></i>
-                Crop
-              </button>
-
-              <button class="editor-tab" data-panel="trim">
-                <i data-lucide="scissors"></i>
-                Trim
-              </button>
-
-              <button class="editor-tab" data-panel="text">
-                <i data-lucide="type"></i>
-                Text
-              </button>
-
-              <button class="editor-tab" data-panel="audio">
-                <i data-lucide="audio-lines"></i>
-                Audio
-              </button>
-
-              <button class="editor-tab" data-panel="effects">
-                <i data-lucide="sparkles"></i>
-                Effects
-              </button>
-
-              <button class="editor-tab" data-panel="transform">
-                <i data-lucide="sliders-horizontal"></i>
-                Settings
-              </button>
-            </div>
-
-            <div id="vyoraToolsPanel" class="editor-tools-panel">
-              <div class="tools-placeholder">
-                Select a tool to begin editing.
+              <div class="editor-preview-controls">
+                <span id="vyoraCurrentTime">00:00</span>
+                <input id="vyoraSeek" type="range"
+                  min="0" max="100" value="0" step="0.01">
+                <span id="vyoraTotalTime">00:00</span>
+                <button type="button" data-action="play">Play</button>
               </div>
+            </section>
+
+          </div>
+
+          <section class="editor-timeline-section">
+            <div class="editor-timeline-toolbar">
+              <strong>Timeline</strong>
+              <button type="button" data-action="add-video">+ Video</button>
+              <button type="button" data-action="add-audio">+ Audio</button>
+              <button type="button" data-action="add-text">+ Text</button>
+              <button type="button" data-action="split">Split</button>
+              <button type="button" data-action="delete">Delete</button>
             </div>
 
+            <div id="vyoraTimelineContainer"
+              class="editor-timeline-container"></div>
           </section>
 
-        </main>
+          <section class="editor-export-bar">
+            <label>
+              Resolution
+              <select id="vyoraExportResolution">
+                <option value="720p">720p</option>
+                <option value="1080p" selected>1080p</option>
+                <option value="1440p">2K</option>
+                <option value="2160p">4K</option>
+              </select>
+            </label>
 
-        <section class="editor-timeline-section">
+            <label>
+              FPS
+              <select id="vyoraExportFPS">
+                <option>24</option>
+                <option selected>30</option>
+                <option>60</option>
+              </select>
+            </label>
 
-          <div class="timeline-heading">
-            <div>
-              <strong>TIMELINE</strong>
-              <span id="vyoraTimelineDuration">00:00</span>
-            </div>
+            <label>
+              Bitrate
+              <select id="vyoraExportBitrate">
+                <option value="5">5 Mbps</option>
+                <option value="10" selected>10 Mbps</option>
+                <option value="15">15 Mbps</option>
+                <option value="25">25 Mbps</option>
+              </select>
+            </label>
 
-            <div class="timeline-actions">
-              <button id="vyoraAddVideo">
-                <i data-lucide="video"></i>
-                Video
-              </button>
-
-              <button id="vyoraAddAudio">
-                <i data-lucide="music"></i>
-                Audio
-              </button>
-
-              <button id="vyoraAddText">
-                <i data-lucide="type"></i>
-                Text
-              </button>
-            </div>
-          </div>
-
-          <div id="vyoraTimeline" class="timeline-container"></div>
-
-        </section>
-
-        <div class="editor-statusbar">
-          <span id="vyoraStatus">Ready</span>
-          <span id="vyoraResolution">1080 × 1920</span>
-        </div>
-
-      </div>
-
-      <div class="vyora-export-overlay" id="vyoraExportOverlay">
-        <div class="vyora-export-card">
-          <div class="export-card-heading">
-            <strong>Export Video</strong>
-            <button id="vyoraCloseExport">
-              <i data-lucide="x"></i>
+            <button type="button" data-action="export">
+              Start Export
             </button>
-          </div>
+          </section>
 
-          <label>Resolution</label>
-          <select id="vyoraExportResolution">
-            <option value="720">720p</option>
-            <option value="1080" selected>1080p</option>
-            <option value="1440">2K</option>
-            <option value="2160">4K</option>
-          </select>
-
-          <label>Frame rate</label>
-          <select id="vyoraExportFPS">
-            <option value="24">24 FPS</option>
-            <option value="30" selected>30 FPS</option>
-            <option value="60">60 FPS</option>
-          </select>
-
-          <label>Bitrate</label>
-          <select id="vyoraExportBitrate">
-            <option value="5000000">5 Mbps</option>
-            <option value="10000000" selected>10 Mbps</option>
-            <option value="16000000">16 Mbps</option>
-            <option value="25000000">25 Mbps</option>
-          </select>
-
-          <div class="export-progress-area" id="vyoraExportProgressArea">
-            <div class="export-progress-track">
-              <div id="vyoraExportProgressBar"></div>
-            </div>
-            <span id="vyoraExportProgressText">0%</span>
-          </div>
-
-          <button class="export-main-button export-start-button"
-            id="vyoraStartExport">
-            Start Export
-          </button>
+          <div id="vyoraEditorMessage" role="status"></div>
         </div>
-      </div>
-    `;
-  }
+      `;
 
-  function renderIcons() {
-    if (window.lucide) {
-      window.lucide.createIcons();
-    }
-  }
+      this.preview = this.$("#vyoraPreviewVideo");
 
-  function setStatus(message) {
-    const element = $("#vyoraStatus");
-    if (element) element.textContent = message;
-  }
-
-  function formatTime(seconds) {
-    seconds = Math.max(0, Number(seconds) || 0);
-
-    const minutes = Math.floor(seconds / 60);
-    const remaining = Math.floor(seconds % 60);
-
-    return (
-      String(minutes).padStart(2, "0") +
-      ":" +
-      String(remaining).padStart(2, "0")
-    );
-  }
-
-  function getProject() {
-    return window.VYORAProject;
-  }
-
-  function getSelectedClip() {
-    const project = getProject();
-
-    if (!project) return null;
-
-    return project.getSelectedClip();
-  }
-
-  function getDuration() {
-    const project = getProject();
-
-    if (!project) return 0;
-
-    let duration = 0;
-
-    for (const track of project.state.tracks || []) {
-      for (const clip of track.clips || []) {
-        duration = Math.max(
-          duration,
-          Number(clip.start || 0) +
-          Number(clip.duration || 0)
-        );
-      }
-    }
-
-    return duration;
-  }
-
-  function initializeModules() {
-    if (!window.VYORAProject) {
-      notify("Project module is missing.");
-      return false;
-    }
-
-    if (!window.VYORAMedia) {
-      notify("Media module is missing.");
-      return false;
-    }
-
-    if (!window.VYORATimeline) {
-      notify("Timeline module is missing.");
-      return false;
-    }
-
-    if (!window.VYORATools) {
-      notify("Tools module is missing.");
-      return false;
-    }
-
-    if (!window.VYORAExporter) {
-      notify("Export module is missing.");
-      return false;
-    }
-
-    return true;
-  }
-
-  function importOriginalVideo(detail) {
-    const state = detail.state || {};
-
-    const file =
-      state.videoFile ||
-      state.selectedFile ||
-      detail.videoFile ||
-      null;
-
-    if (!file || !(file instanceof File)) {
-      notify("Original video file was not found.");
-      return;
-    }
-
-    const media = window.VYORAMedia;
-
-    const asset = media.addAsset(file);
-
-    currentVideoId = asset.id;
-
-    const project = getProject();
-
-    const videoTrack = project.state.tracks.find(
-      track => track.type === "video"
-    );
-
-    if (!videoTrack) {
-      notify("Video track was not found.");
-      return;
-    }
-
-    project.addClip(videoTrack.id, {
-      source: asset.id,
-      name: file.name,
-      start: 0,
-      duration: Number(asset.duration || 1),
-      sourceStart: 0,
-      speed: 1,
-      crop: {
-        top: 0,
-        bottom: 0,
-        left: 0,
-        right: 0
-      }
-    });
-
-    media.openVideo(asset.id);
-
-    $("#vyoraPreviewEmpty").style.display = "none";
-
-    setStatus("Video imported");
-
-    updateProjectInfo();
-    drawPreview();
-
-    notify("Video added to timeline.");
-  }
-
-  function updateProjectInfo() {
-    const project = getProject();
-
-    if (!project) return;
-
-    const settings = project.state.settings || {};
-
-    const name = $("#vyoraProjectName");
-    const resolution = $("#vyoraResolution");
-    const duration = $("#vyoraTimelineDuration");
-
-    if (name) {
-      name.textContent = project.state.name || "Untitled Project";
-    }
-
-    if (resolution) {
-      resolution.textContent =
-        `${settings.width || 1080} × ${settings.height || 1920}`;
-    }
-
-    if (duration) {
-      duration.textContent = formatTime(getDuration());
-    }
-  }
-
-  function drawPreview() {
-    const canvas = $("#vyoraPreviewCanvas");
-
-    if (!canvas || !window.VYORAMedia) return;
-
-    const media = window.VYORAMedia;
-
-    const video = media.activeVideo &&
-      media.activeVideo.element;
-
-    if (!video || video.readyState < 2) return;
-
-    const context = canvas.getContext("2d");
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const scale = Math.max(
-      width / video.videoWidth,
-      height / video.videoHeight
-    );
-
-    const drawWidth = video.videoWidth * scale;
-    const drawHeight = video.videoHeight * scale;
-
-    context.drawImage(
-      video,
-      (width - drawWidth) / 2,
-      (height - drawHeight) / 2,
-      drawWidth,
-      drawHeight
-    );
-
-    const project = getProject();
-
-    if (project) {
-      const time = project.state.playhead || 0;
-
-      for (const layer of project.state.textLayers || []) {
-        if (
-          time < layer.start ||
-          time >= layer.start + layer.duration
-        ) continue;
-
-        context.save();
-
-        context.fillStyle = layer.color || "#ffffff";
-        context.globalAlpha =
-          Number(layer.opacity ?? 100) / 100;
-
-        context.font =
-          `bold ${Number(layer.fontSize || 48)}px Arial`;
-
-        context.textAlign = "center";
-
-        context.fillText(
-          layer.text || "",
-          width * Number(layer.x ?? 50) / 100,
-          height * Number(layer.y ?? 50) / 100
-        );
-
-        context.restore();
-      }
-    }
-  }
-
-  function openToolPanel(panel) {
-    if (!tools) return;
-
-    $$(".editor-tab").forEach(button => {
-      button.classList.toggle(
-        "active",
-        button.dataset.panel === panel
-      );
-    });
-
-    tools.setPanel(panel);
-  }
-
-  function bindEditorEvents() {
-    $("#vyoraBack").addEventListener("click", () => {
-      const home = $("#homeScreen");
-
-      if (home) home.classList.remove("hidden");
-
-      const editor = $("#editorScreen");
-
-      if (editor) editor.classList.add("hidden");
-    });
-
-    $("#vyoraUndo").addEventListener("click", () => {
-      getProject().undo();
-      setStatus("Undo");
-      drawPreview();
-    });
-
-    $("#vyoraRedo").addEventListener("click", () => {
-      getProject().redo();
-      setStatus("Redo");
-      drawPreview();
-    });
-
-    $("#vyoraSave").addEventListener("click", () => {
-      const data = getProject().exportProject();
-
-      const blob = new Blob([data], {
-        type: "application/json"
-      });
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = "VYORA-project.json";
-      link.click();
-
-      URL.revokeObjectURL(url);
-
-      notify("Project file saved.");
-    });
-
-    $("#vyoraPlay").addEventListener("click", () => {
-      if (!window.VYORAMedia) return;
-
-      window.VYORAMedia.play();
-
-      setStatus("Playing");
-    });
-
-    $("#vyoraStop").addEventListener("click", () => {
-      window.VYORAMedia.stop();
-
-      setStatus("Stopped");
-      drawPreview();
-    });
-
-    $("#vyoraPreviousFrame").addEventListener("click", () => {
-      const project = getProject();
-
-      project.setPlayhead(
-        Math.max(0, project.state.playhead - 1 / 30)
-      );
-
-      drawPreview();
-    });
-
-    $("#vyoraNextFrame").addEventListener("click", () => {
-      const project = getProject();
-
-      project.setPlayhead(
-        project.state.playhead + 1 / 30
-      );
-
-      drawPreview();
-    });
-
-    $("#vyoraPreviewFit").addEventListener("click", () => {
-      drawPreview();
-    });
-
-    $$(".editor-tab").forEach(button => {
-      button.addEventListener("click", () => {
-        openToolPanel(button.dataset.panel);
-      });
-    });
-
-    $("#vyoraAddVideo").addEventListener("click", () => {
-      $("#vyoraExtraVideoInput").click();
-    });
-
-    $("#vyoraAddAudio").addEventListener("click", () => {
-      $("#vyoraExtraAudioInput").click();
-    });
-
-    $("#vyoraAddText").addEventListener("click", () => {
-      openToolPanel("text");
-      tools.addText();
-    });
-
-    $("#vyoraExport").addEventListener("click", () => {
-      $("#vyoraExportOverlay").classList.add("open");
-    });
-
-    $("#vyoraCloseExport").addEventListener("click", () => {
-      $("#vyoraExportOverlay").classList.remove("open");
-    });
-
-    $("#vyoraStartExport").addEventListener("click", startExport);
-
-    $("#vyoraExportResolution").addEventListener("change", event => {
-      const value = Number(event.target.value);
-
-      const ratio = getProject().state.settings.ratio ||
-        (9 / 16);
-
-      const width = value;
-      const height = Math.round(width / ratio);
-
-      getProject().setSettings({
-        width,
-        height
-      });
-
-      updateProjectInfo();
-    });
-
-    $("#vyoraExportFPS").addEventListener("change", event => {
-      getProject().setSettings({
-        fps: Number(event.target.value)
-      });
-    });
-
-    $("#vyoraExportBitrate").addEventListener("change", event => {
-      getProject().setSettings({
-        bitrate: Number(event.target.value)
-      });
-    });
-
-    createExtraInputs();
-  }
-
-  function createExtraInputs() {
-    const videoInput = document.createElement("input");
-
-    videoInput.type = "file";
-    videoInput.accept = "video/*";
-    videoInput.id = "vyoraExtraVideoInput";
-    videoInput.hidden = true;
-
-    videoInput.addEventListener("change", async event => {
-      const file = event.target.files[0];
-
-      if (!file) return;
-
-      try {
-        const asset = await window.VYORAMedia.addAsset(file);
-
-        const track = getProject().state.tracks.find(
-          item => item.type === "video"
-        );
-
-        getProject().addClip(track.id, {
-          source: asset.id,
-          name: file.name,
-          start: getDuration(),
-          duration: Number(asset.duration || 1),
-          sourceStart: 0,
-          speed: 1
+      this.mount.querySelectorAll("[data-panel]").forEach(button => {
+        button.addEventListener("click", () => {
+          this.openTool(button.dataset.panel);
         });
+      });
+    },
 
-        updateProjectInfo();
-        notify("Video added.");
-      } catch (error) {
-        notify(error.message);
+    connectModules() {
+      if (window.VYORATimeline) {
+        this.timeline = window.VYORATimeline;
+
+        try {
+          this.timeline.init({
+            project: this.project,
+            container: this.$("#vyoraTimelineContainer")
+          });
+        } catch (error) {
+          console.error("Timeline initialization failed:", error);
+        }
       }
 
-      event.target.value = "";
-    });
+      if (window.VYORATools) {
+        this.tools = window.VYORATools;
 
-    const audioInput = document.createElement("input");
+        try {
+          this.tools.init({
+            project: this.project,
+            media: this.media,
+            container: this.$("#vyoraToolsPanel")
+          });
+        } catch (error) {
+          console.error("Tools initialization failed:", error);
+        }
+      }
 
-    audioInput.type = "file";
-    audioInput.accept = "audio/*";
-    audioInput.id = "vyoraExtraAudioInput";
-    audioInput.hidden = true;
+      if (this.unsubscribe) this.unsubscribe();
 
-    audioInput.addEventListener("change", async event => {
-      const file = event.target.files[0];
+      this.unsubscribe = this.project.subscribe(() => {
+        this.renderProjectInfo();
+      });
 
-      if (!file) return;
+      this.media.attachPreview(this.preview);
+    },
 
-      try {
-        const asset = await window.VYORAMedia.addAsset(file);
+    async ensureVideoTrack() {
+      let track = this.project.data.tracks.find(item =>
+        item.type === "video"
+      );
 
-        const track = getProject().state.tracks.find(
-          item => item.type === "audio"
+      if (!track) {
+        track = this.project.addTrack("video", "Video 1");
+      }
+
+      return track;
+    },
+
+    async importVideo(file) {
+      if (!file) return null;
+
+      if (!this.media.isVideo(file)) {
+        throw new Error("Please select a supported video file.");
+      }
+
+      this.toast("Importing video...");
+
+      const asset = await this.media.loadVideo(file);
+      if (!asset || !asset.id) {
+        throw new Error("Video could not be imported.");
+      }
+
+      const track = await this.ensureVideoTrack();
+
+      const clip = this.project.addClip(track.id, {
+        type: "video",
+        name: asset.name,
+        assetId: asset.id,
+        start: 0,
+        duration: asset.duration,
+        sourceStart: 0,
+        sourceEnd: asset.duration,
+        crop: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0
+        },
+        effects: [],
+        opacity: 1,
+        volume: 1
+      });
+
+      if (!clip) {
+        throw new Error("Video was imported but timeline clip could not be created.");
+      }
+
+      this.currentAssetId = asset.id;
+      await this.openAsset(asset.id);
+
+      this.project.setDuration(asset.duration);
+      this.project.selectClip(clip.id, track.id);
+
+      this.renderProjectInfo();
+      this.refreshTimeline();
+
+      this.toast("Video added to timeline.");
+      return asset;
+    },
+
+    async openAsset(assetId) {
+      const asset = this.media.getAsset(assetId);
+
+      if (!asset || asset.type !== "video") {
+        throw new Error("Saved video file is not available.");
+      }
+
+      await this.media.openVideo(assetId, this.preview);
+
+      this.currentAssetId = assetId;
+
+      const placeholder = this.$("#vyoraPreviewPlaceholder");
+      if (placeholder) placeholder.style.display = "none";
+
+      this.preview.style.display = "block";
+
+      const status = this.$("#vyoraPreviewStatus");
+      if (status) status.textContent = asset.name;
+
+      this.renderProjectInfo();
+      return true;
+    },
+
+    async restoreProjectMedia() {
+      const assets = this.media.getAllAssets();
+      const clip = this.getSavedClip();
+
+      if (!clip) {
+        this.toast("No saved video clip found.");
+        return;
+      }
+
+      const asset = assets.find(item => item.id === clip.assetId);
+
+      if (!asset) {
+        this.toast("Saved clip found, but its media file is missing.");
+        return;
+      }
+
+      await this.openAsset(asset.id);
+      this.project.selectClip(clip.id);
+
+      // Restore the last saved playhead position.
+      const savedTime = Number(this.project.data.playhead) || 0;
+      this.media.seek(savedTime);
+    },
+
+    openTool(panel) {
+      if (!this.tools) {
+        this.toast("Tools module is not available.");
+        return;
+      }
+
+      if (typeof this.tools.setPanel === "function") {
+        this.tools.setPanel(panel);
+      }
+
+      this.mount.querySelectorAll("[data-panel]").forEach(button => {
+        button.classList.toggle(
+          "active",
+          button.dataset.panel === panel
         );
+      });
+    },
 
-        getProject().addClip(track.id, {
-          source: asset.id,
-          name: file.name,
-          start: 0,
-          duration: Number(asset.duration || 1),
-          sourceStart: 0,
-          speed: 1,
-          metadata: {
-            volume: 1,
-            fadeIn: 0,
-            fadeOut: 0
+    bindEvents() {
+      this.mount.addEventListener("click", event => {
+        const button = event.target.closest("[data-action]");
+        if (!button) return;
+
+        const action = button.dataset.action;
+
+        switch (action) {
+          case "back":
+            this.goBack();
+            break;
+          case "undo":
+            this.project.undo();
+            break;
+          case "redo":
+            this.project.redo();
+            break;
+          case "save":
+            this.saveProject();
+            break;
+          case "play":
+            this.togglePlayback();
+            break;
+          case "add-video":
+            this.chooseMedia("video");
+            break;
+          case "add-audio":
+            this.chooseMedia("audio");
+            break;
+          case "add-text":
+            this.addText();
+            break;
+          case "split":
+            this.splitSelectedClip();
+            break;
+          case "delete":
+            this.deleteSelectedClip();
+            break;
+          case "export":
+            this.exportProject();
+            break;
+        }
+      });
+
+      this.$("#vyoraProjectName").addEventListener("change", event => {
+        this.project.setProjectName(event.target.value);
+      });
+
+      this.preview.addEventListener("timeupdate", () => {
+        this.updatePlaybackDisplay();
+        this.project.setPlayhead(this.preview.currentTime);
+      });
+
+      this.preview.addEventListener("loadedmetadata", () => {
+        this.renderProjectInfo();
+      });
+
+      this.preview.addEventListener("ended", () => {
+        this.updatePlaybackButton();
+      });
+
+      this.$("#vyoraSeek").addEventListener("input", event => {
+        const value = Number(event.target.value);
+        const duration = this.preview.duration || 0;
+        if (duration > 0) {
+          this.media.seek(duration * value / 100);
+        }
+      });
+
+      this.$("#vyoraExportFPS").addEventListener("change", event => {
+        this.project.setFPS(Number(event.target.value));
+      });
+
+      this.$("#vyoraExportResolution").addEventListener("change", () => {
+        this.project.data.settings.resolution =
+          this.$("#vyoraExportResolution").value;
+        this.project.scheduleSave();
+      });
+
+      this.$("#vyoraExportBitrate").addEventListener("change", () => {
+        this.project.data.settings.bitrate =
+          Number(this.$("#vyoraExportBitrate").value);
+        this.project.scheduleSave();
+      });
+
+      this.preview.addEventListener("error", () => {
+        this.toast("Video preview could not be loaded.");
+      });
+    },
+
+    chooseMedia(type) {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = type === "video"
+        ? "video/*"
+        : "audio/*";
+
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+
+        try {
+          if (type === "video") {
+            await this.importVideo(file);
+          } else {
+            const asset = await this.media.loadAudio(file);
+            const track = this.project.data.tracks.find(t =>
+              t.type === "audio"
+            ) || this.project.addTrack("audio", "Audio");
+
+            this.project.addClip(track.id, {
+              type: "audio",
+              name: asset.name,
+              assetId: asset.id,
+              start: this.project.data.playhead || 0,
+              duration: asset.duration,
+              sourceStart: 0,
+              sourceEnd: asset.duration,
+              volume: 1
+            });
+
+            this.toast("Audio added to timeline.");
+            this.refreshTimeline();
           }
-        });
+        } catch (error) {
+          console.error(error);
+          this.toast(error.message || "Import failed.");
+        }
+      };
 
-        updateProjectInfo();
-        notify("Audio added to timeline.");
-      } catch (error) {
-        notify(error.message);
+      input.click();
+    },
+
+    async togglePlayback() {
+      if (!this.currentAssetId) {
+        this.toast("Import a video first.");
+        return;
       }
 
-      event.target.value = "";
-    });
+      if (this.preview.paused) {
+        await this.media.playVideo();
+      } else {
+        this.media.pauseVideo();
+      }
 
-    document.body.append(videoInput, audioInput);
-  }
+      this.updatePlaybackButton();
+    },
 
-  async function startExport() {
-    const button = $("#vyoraStartExport");
+    updatePlaybackButton() {
+      const button = this.$('[data-action="play"]');
+      if (button) {
+        button.textContent = this.preview.paused ? "Play" : "Pause";
+      }
+    },
 
-    button.disabled = true;
-    button.textContent = "Exporting...";
+    updatePlaybackDisplay() {
+      const current = this.$("#vyoraCurrentTime");
+      const total = this.$("#vyoraTotalTime");
+      const seek = this.$("#vyoraSeek");
 
-    $("#vyoraExportProgressArea").style.display = "block";
+      const format = seconds => {
+        seconds = Math.max(0, Number(seconds) || 0);
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
 
-    try {
-      await window.VYORAExporter.export({
-        filename: "VYORA-Video"
-      });
+        return String(mins).padStart(2, "0") + ":" +
+          String(secs).padStart(2, "0");
+      };
 
-      notify("Export completed.");
-    } catch (error) {
-      notify(error.message || "Export failed.");
-    } finally {
-      button.disabled = false;
-      button.textContent = "Start Export";
+      const duration = Number.isFinite(this.preview.duration)
+        ? this.preview.duration : 0;
+
+      if (current) current.textContent = format(this.preview.currentTime);
+      if (total) total.textContent = format(duration);
+
+      if (seek) {
+        seek.value = duration
+          ? (this.preview.currentTime / duration) * 100
+          : 0;
+      }
+
+      this.updatePlaybackButton();
+    },
+
+    addText() {
+      if (!this.tools || typeof this.tools.addText !== "function") {
+        this.toast("Text tool is not available.");
+        return;
+      }
+
+      this.openTool("text");
+      this.tools.addText();
+      this.refreshTimeline();
+    },
+
+    splitSelectedClip() {
+      const clipId = this.project.data.selectedClipId;
+      if (!clipId) {
+        this.toast("Select a timeline clip first.");
+        return;
+      }
+
+      const time = this.preview.currentTime;
+      const result = this.project.splitClip(clipId, time);
+
+      if (!result) {
+        this.toast("Move the playhead inside the selected clip.");
+        return;
+      }
+
+      this.refreshTimeline();
+      this.toast("Clip split.");
+    },
+
+    deleteSelectedClip() {
+      const clipId = this.project.data.selectedClipId;
+      if (!clipId) {
+        this.toast("Select a clip first.");
+        return;
+      }
+
+      this.project.removeClip(clipId);
+      this.refreshTimeline();
+      this.toast("Clip deleted.");
+    },
+
+    refreshTimeline() {
+      if (this.timeline && typeof this.timeline.render === "function") {
+        this.timeline.render();
+      }
+    },
+
+    renderProjectInfo() {
+      if (!this.mount) return;
+
+      const name = this.$("#vyoraProjectName");
+      if (name && document.activeElement !== name) {
+        name.value = this.project.data.name || "Untitled Project";
+      }
+
+      const duration = this.preview?.duration || this.project.data.duration || 0;
+      const total = this.$("#vyoraTotalTime");
+
+      if (total) {
+        const mins = Math.floor(duration / 60);
+        const secs = Math.floor(duration % 60);
+        total.textContent =
+          String(mins).padStart(2, "0") + ":" +
+          String(secs).padStart(2, "0");
+      }
+
+      this.updatePlaybackDisplay();
+    },
+
+    saveProject() {
+      const saved = this.project.saveNow();
+
+      if (saved) {
+        this.toast("Project saved on this device.");
+      } else {
+        this.toast("Project could not be saved. Check device storage.");
+      }
+    },
+
+    async exportProject() {
+      const exporter = window.VYORAExporter;
+
+      if (!exporter) {
+        this.toast("Export module is not available yet.");
+        return;
+      }
+
+      const settings = {
+        resolution: this.$("#vyoraExportResolution").value,
+        fps: Number(this.$("#vyoraExportFPS").value),
+        bitrate: Number(this.$("#vyoraExportBitrate").value)
+      };
+
+      try {
+        if (typeof exporter.exportVideo === "function") {
+          await exporter.exportVideo(settings);
+        } else if (typeof exporter.exportProject === "function") {
+          await exporter.exportProject(settings);
+        } else {
+          this.toast("Export function is not connected yet.");
+        }
+      } catch (error) {
+        console.error("VYORA export error:", error);
+        this.toast(error.message || "Export failed.");
+      }
+    },
+
+    goBack() {
+      this.saveProject();
+
+      const editorScreen = document.getElementById("editorScreen");
+      const homeScreen = document.getElementById("homeScreen");
+            if (editorScreen) editorScreen.classList.remove("active");
+      if (homeScreen) homeScreen.classList.add("active");
     }
-  }
-
-  function bindExportEvents() {
-    window.addEventListener("vyora:export-progress", event => {
-      const progress = event.detail.progress;
-
-      $("#vyoraExportProgressBar").style.width =
-        progress + "%";
-
-      $("#vyoraExportProgressText").textContent =
-        progress + "%";
-    });
-
-    window.addEventListener("vyora:export-complete", () => {
-      $("#vyoraExportProgressText").textContent = "100%";
-    });
-
-    window.addEventListener("vyora:export-error", event => {
-      notify(event.detail.message);
-    });
-  }
-
-  function initializeEditor(detail) {
-    if (initialized) {
-      const screen = $("#editorScreen");
-
-      if (screen) screen.classList.remove("hidden");
-
-      importOriginalVideo(detail);
-      return;
-    }
-
-    if (!initializeModules()) return;
-
-    const mount = $("#editorMount");
-
-    if (!mount) {
-      notify("Editor mount element is missing.");
-      return;
-    }
-
-    mount.innerHTML = createEditorHTML();
-
-    renderIcons();
-
-    timeline = window.VYORATimeline.init(
-  $("#vyoraTimeline")
-);
-
-tools = window.VYORATools;
-
-tools.init({
-  project: window.VYORAProject,
-  media: window.VYORAMedia,
-  container: $("#vyoraToolsPanel")
-});
-
-    bindEditorEvents();
-    bindExportEvents();
-
-    const screen = $("#editorScreen");
-
-    if (screen) screen.classList.remove("hidden");
-
-    initialized = true;
-
-    importOriginalVideo(detail);
-
-    openToolPanel("media");
-
-    updateProjectInfo();
-
-    renderIcons();
-  }
-
-  window.addEventListener("vyora:open-editor",     event => {
-      initializeEditor(event.detail || {});
-    }
-  );
-
-  window.VYORAEditor = {
-    initialize: initializeEditor,
-    drawPreview,
-    updateProjectInfo,
-    getDuration
   };
+
+  window.VYORAEditor = Editor;
+
+  window.addEventListener("vyora:open-editor", event => {
+    Editor.init(event.detail || {});
+  });
+
+  window.addEventListener("vyora:media-ready", () => {
+    if (Editor.initialized && !Editor.currentAssetId) {
+      Editor.restoreProjectMedia().catch(console.error);
+    }
+  });
 
 })();
