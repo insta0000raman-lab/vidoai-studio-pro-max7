@@ -791,5 +791,219 @@
           min-width: 24px;
           border-radius: 6px;
           overflow: hidden;
-          cursor: grab;
+          cursor: grab;        }
+
+        .vyora-clip:hover {
+          filter: brightness(1.15);
+        }
+
+        .vyora-clip.selected {
+          outline: 2px solid #ffffff;
+          outline-offset: -2px;
+        }
+
+        .vyora-clip-label {
+          padding: 5px 7px;
+          font-size: 11px;
+          color: #fff;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          pointer-events: none;
+        }
+
+        .vyora-playhead {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 2px;
+          background: #ff4d83;
+          z-index: 10;
+          pointer-events: none;
+        }
+
+        .vyora-playhead::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -4px;
+          width: 10px;
+          height: 10px;
+          background: #ff4d83;
+          border-radius: 50%;
+        }
+
+        .vyora-timeline-empty {
+          padding: 25px;
+          text-align: center;
+          color: #858595;
+          font-size: 13px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function render() {
+      if (!container) return;
+
+      const state = project.state;
+      const clips = state.clips || [];
+      const tracks = state.tracks || [];
+      const duration = Math.max(10, state.duration || 30);
+      const pixelsPerSecond = zoom * 10;
+
+      container.innerHTML = `
+        <div class="vyora-timeline">
+          <div class="vyora-timeline-toolbar">
+            <button data-action="add-track">+ Track</button>
+            <button data-action="split">Split</button>
+            <button data-action="delete">Delete</button>
+            <button data-action="zoom-out">−</button>
+            <button data-action="zoom-in">+</button>
+            <button data-action="fit">Fit</button>
+          </div>
+
+          <div class="vyora-timeline-scroll">
+            <div class="vyora-timeline-content"
+                 style="width:${Math.max(600, duration * pixelsPerSecond + 100)}px">
+
+              <div class="vyora-ruler">
+                ${Array.from({ length: Math.ceil(duration) + 1 }, (_, i) =>
+                  `<span style="left:${i * pixelsPerSecond}px">${i}s</span>`
+                ).join("")}
+              </div>
+
+              ${tracks.map(track => `
+                <div class="vyora-track">
+                  <div class="vyora-track-header">
+                    <span>${escapeHTML(track.name || "Track")}</span>
+                    <button data-action="mute-track"
+                            data-id="${track.id}">M</button>
+                    <button data-action="lock-track"
+                            data-id="${track.id}">L</button>
+                  </div>
+
+                  <div class="vyora-track-lane"
+                       data-track="${track.id}">
+                    ${clips.filter(c => c.trackId === track.id).map(clip => `
+                      <div class="vyora-clip ${selectedClipId === clip.id ? "selected" : ""}"
+                           data-clip="${clip.id}"
+                           style="left:${clip.start * pixelsPerSecond}px;
+                                  width:${Math.max(24, clip.duration * pixelsPerSecond)}px">
+                        <div class="vyora-clip-label">
+                          ${escapeHTML(clip.name || clip.type || "Clip")}
+                        </div>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              `).join("")}
+
+              <div class="vyora-playhead"
+                   style="left:${(state.playhead || 0) * pixelsPerSecond}px">
+              </div>
+
+              ${clips.length === 0 ? `
+                <div class="vyora-timeline-empty">
+                  Import media to start editing
+                </div>
+              ` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+
+      bindEvents();
+    }
+
+    function escapeHTML(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    function bindEvents() {
+      container.querySelectorAll("[data-action]").forEach(button => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.action;
+
+          if (action === "add-track") {
+            project.addTrack();
+          } else if (action === "split") {
+            if (selectedClipId) {
+              project.splitClip(selectedClipId, project.state.playhead || 0);
+            }
+          } else if (action === "delete") {
+            if (selectedClipId) {
+              project.removeClip(selectedClipId);
+              selectedClipId = null;
+            }
+          } else if (action === "zoom-in") {
+            zoom = Math.min(20, zoom + 2);
+            render();
+          } else if (action === "zoom-out") {
+            zoom = Math.max(2, zoom - 2);
+            render();
+          } else if (action === "fit") {
+            zoom = 5;
+            render();
+          } else if (action === "mute-track") {
+            project.updateTrack(button.dataset.id, { muted: true });
+          } else if (action === "lock-track") {
+            project.updateTrack(button.dataset.id, { locked: true });
+          }
+        });
+      });
+
+      container.querySelectorAll(".vyora-clip").forEach(clipElement => {
+        clipElement.addEventListener("click", event => {
+          event.stopPropagation();
+          selectedClipId = clipElement.dataset.clip;
+          project.selectClip(selectedClipId);
+          render();
+        });
+      });
+
+      container.querySelectorAll(".vyora-track-lane").forEach(lane => {
+        lane.addEventListener("click", event => {
+          if (event.target.closest(".vyora-clip")) return;
+
+          const rect = lane.getBoundingClientRect();
+          const seconds = Math.max(0, (event.clientX - rect.left) / (zoom * 10));
+
+          project.setPlayhead(seconds);
+          window.dispatchEvent(new CustomEvent("vyora:timeline-seek", {
+            detail: { time: seconds }
+          }));
+        });
+      });
+    }
+
+    function init(element) {
+      container = element;
+      if (!container) throw new Error("Timeline container missing");
+
+      addStyles();
+      render();
+
+      if (project.subscribe) {
+        unsubscribe = project.subscribe(render);
+      }
+
+      return {
+        render,
+        destroy() {
+          if (unsubscribe) unsubscribe();
+          container.innerHTML = "";
+        }
+      };
+    }
+
+    window.VYORATimeline = { init };
+
+  })();
    
