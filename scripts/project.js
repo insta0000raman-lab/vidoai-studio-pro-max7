@@ -1,164 +1,98 @@
 (() => {
   "use strict";
 
-  const DEFAULT_PROJECT = {
-    id: createId("project"),
-    name: "Untitled Project",
-    version: 1,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+  const clone = value => {
+    if (value === undefined) return undefined;
+    return JSON.parse(JSON.stringify(value));
+  };
 
-    settings: {
-      width: 1080,
-      height: 1920,
-      fps: 30,
-      background: "#08090d",
-      duration: 0,
-      aspectRatio: "9:16"
-    },
+  const createId = prefix =>
+    `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 
-    tracks: [
-      {
-        id: "video-track-1",
-        name: "Video",
+  const clamp = (value, min, max) =>
+    Math.min(max, Math.max(min, Number(value) || 0));
+
+  class ProjectManager {
+    constructor() {
+      this.data = this.createDefaultProject();
+      this.history = [];
+      this.future = [];
+      this.listeners = new Set();
+      this.maxHistory = 60;
+    }
+
+    createDefaultProject() {
+      const track = {
+        id: createId("track"),
+        name: "Video 1",
         type: "video",
         muted: false,
         locked: false,
         visible: true,
         clips: []
-      },
-      {
-        id: "audio-track-1",
-        name: "Audio",
-        type: "audio",
-        muted: false,
-        locked: false,
-        visible: true,
-        clips: []
-      },
-      {
-        id: "text-track-1",
-        name: "Text",
-        type: "text",
-        muted: false,
-        locked: false,
-        visible: true,
-        clips: []
-      }
-    ],
+      };
 
-    textLayers: [],
-    effects: [],
-    selectedClipId: null,
-    selectedTrackId: "video-track-1",
-    playhead: 0,
-    zoom: 1
-  };
-
-  function createId(prefix = "item") {
-    return (
-      prefix +
-      "_" +
-      Date.now().toString(36) +
-      "_" +
-      Math.random().toString(36).slice(2, 9)
-    );
-  }
-
-  function clone(value) {
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function isNumber(value) {
-    return Number.isFinite(Number(value));
-  }
-
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  class ProjectManager {
-    constructor() {
-      this.data = clone(DEFAULT_PROJECT);
-      this.undoStack = [];
-      this.redoStack = [];
-      this.historyLimit = 80;
-      this.listeners = new Set();
-      this.transactionDepth = 0;
-      this.transactionSnapshot = null;
-    }
-
-    getState() {
-      return clone(this.data);
-    }
-
-    get settings() {
-      return clone(this.data.settings);
-    }
-
-    get tracks() {
-      return clone(this.data.tracks);
-    }
-
-    get duration() {
-      let max = 0;
-
-      this.data.tracks.forEach(track => {
-        track.clips.forEach(clip => {
-          max = Math.max(max, clip.start + clip.duration);
-        });
-      });
-
-      return max;
-    }
-
-    subscribe(callback) {
-      if (typeof callback !== "function") {
-        throw new TypeError("Listener must be a function.");
-      }
-
-      this.listeners.add(callback);
-
-      return () => {
-        this.listeners.delete(callback);
+      return {
+        id: createId("project"),
+        name: "Untitled Project",
+        version: 1,
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        duration: 0,
+        playhead: 0,
+        zoom: 1,
+        selectedTrackId: track.id,
+        selectedClipId: null,
+        selectedTextId: null,
+        tracks: [track],
+        textLayers: [],
+        effects: [],
+        settings: {
+          background: "#000000",
+          audioVolume: 1
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       };
     }
 
-    emit(action = "update") {
-      const state = this.getState();
+    get state() {
+      return this.data;
+    }
+
+    getSnapshot() {
+      return clone(this.data);
+    }
+
+    subscribe(callback) {
+      if (typeof callback !== "function") return () => {};
+      this.listeners.add(callback);
+      callback(this.getSnapshot());
+
+      return () => this.listeners.delete(callback);
+    }
+
+    notify(action) {
+      const snapshot = this.getSnapshot();
 
       this.listeners.forEach(callback => {
         try {
-          callback(state, action);
+          callback(snapshot, action);
         } catch (error) {
-          console.error("VYORA project listener error:", error);
+          console.error("VYORA listener error:", error);
         }
       });
-
-      window.dispatchEvent(
-        new CustomEvent("vyora:project-change", {
-          detail: {
-            action,
-            project: state
-          }
-        })
-      );
     }
 
     saveHistory() {
-      if (this.transactionDepth > 0) return;
+      this.history.push(clone(this.data));
 
-      this.undoStack.push(clone(this.data));
-
-      if (this.undoStack.length > this.historyLimit) {
-        this.undoStack.shift();
+      if (this.history.length > this.maxHistory) {
+        this.history.shift();
       }
 
-      this.redoStack = [];
-    }
-
-    updateTimestamp() {
-      this.data.updatedAt = Date.now();
+      this.future = [];
     }
 
     update(action, callback) {
@@ -167,164 +101,110 @@
       this.saveHistory();
 
       try {
-        callback(this.data);
-        this.updateTimestamp();
-        this.emit(action);
-        return true;
+        const result = callback(this.data);
+        this.data.updatedAt = Date.now();
+        this.notify(action);
+        return result === undefined ? true : result;
       } catch (error) {
+        this.data = this.history.pop() || this.createDefaultProject();
         console.error("VYORA project update failed:", error);
-        return false;
-      }
-    }
-
-    transaction(action, callback) {
-      if (typeof callback !== "function") return false;
-
-      if (this.transactionDepth === 0) {
-        this.transactionSnapshot = clone(this.data);
-        this.saveHistory();
-      }
-
-      this.transactionDepth++;
-
-      try {
-        callback(this.data);
-        this.transactionDepth--;
-
-        if (this.transactionDepth === 0) {
-          this.transactionSnapshot = null;
-          this.updateTimestamp();
-          this.emit(action);
-        }
-
-        return true;
-      } catch (error) {
-        this.transactionDepth = 0;
-
-        if (this.transactionSnapshot) {
-          this.data = this.transactionSnapshot;
-        }
-
-        this.transactionSnapshot = null;
-
-        console.error("VYORA transaction failed:", error);
-        this.emit("transaction-error");
+        this.notify("update-error");
         return false;
       }
     }
 
     undo() {
-      if (!this.undoStack.length) return false;
+      if (!this.history.length) return false;
 
-      this.redoStack.push(clone(this.data));
-      this.data = this.undoStack.pop();
-
-      this.updateTimestamp();
-      this.emit("undo");
-
+      this.future.push(clone(this.data));
+      this.data = this.history.pop();
+      this.notify("undo");
       return true;
     }
 
     redo() {
-      if (!this.redoStack.length) return false;
+      if (!this.future.length) return false;
 
-      this.undoStack.push(clone(this.data));
-      this.data = this.redoStack.pop();
-
-      this.updateTimestamp();
-      this.emit("redo");
-
+      this.history.push(clone(this.data));
+      this.data = this.future.pop();
+      this.notify("redo");
       return true;
     }
 
     canUndo() {
-      return this.undoStack.length > 0;
+      return this.history.length > 0;
     }
 
     canRedo() {
-      return this.redoStack.length > 0;
+      return this.future.length > 0;
     }
 
     newProject(name = "Untitled Project") {
       this.saveHistory();
-
-      this.data = clone(DEFAULT_PROJECT);
-      this.data.id = createId("project");
-      this.data.name = String(name).trim() || "Untitled Project";
-      this.data.createdAt = Date.now();
-      this.data.updatedAt = Date.now();
-
-      this.undoStack = [];
-      this.redoStack = [];
-
-      this.emit("new-project");
-
-      return this.getState();
+      this.data = this.createDefaultProject();
+      this.data.name = String(name || "Untitled Project");
+      this.history = [];
+      this.future = [];
+      this.notify("new-project");
+      return this.getSnapshot();
     }
 
-    setName(name) {
-      const cleanName = String(name || "").trim();
-
-      if (!cleanName) return false;
-
-      return this.update("rename-project", data => {
-        data.name = cleanName.slice(0, 80);
+    setProjectName(name) {
+      return this.update("project-name", data => {
+        data.name = String(name || "Untitled Project").slice(0, 100);
       });
     }
 
-    setSettings(settings = {}) {
-      const allowed = [
-        "width",
-        "height",
-        "fps",
-        "background",
-        "aspectRatio"
-      ];
+    setCanvas(width, height) {
+      width = Math.round(Number(width));
+      height = Math.round(Number(height));
 
-      return this.update("project-settings", data => {
-        allowed.forEach(key => {
-          if (settings[key] === undefined) return;
+      if (!Number.isFinite(width) || !Number.isFinite(height) ||
+          width < 1 || height < 1 || width > 7680 || height > 7680) {
+        return false;
+      }
 
-          if (key === "width" || key === "height") {
-            const value = Number(settings[key]);
+      return this.update("canvas-size", data => {
+        data.width = width;
+        data.height = height;
+      });
+    }
 
-            if (isNumber(value) && value >= 16 && value <= 7680) {
-              data.settings[key] = Math.round(value);
-            }
-          } else if (key === "fps") {
-            const value = Number(settings[key]);
+    setFPS(fps) {
+      fps = Number(fps);
+      if (![24, 25, 30, 50, 60].includes(fps)) return false;
 
-            if ([24, 25, 30, 48, 50, 60, 120].includes(value)) {
-              data.settings.fps = value;
-            }
-          } else if (key === "background") {
-            data.settings.background = String(settings[key]);
-          } else if (key === "aspectRatio") {
-            data.settings.aspectRatio = String(settings[key]);
-          }
-        });
+      return this.update("fps", data => {
+        data.fps = fps;
+      });
+    }
+
+    setDuration(duration) {
+      duration = Math.max(0, Number(duration) || 0);
+
+      return this.update("duration", data => {
+        data.duration = duration;
       });
     }
 
     setPlayhead(time) {
-      if (!isNumber(time)) return false;
+      time = Math.max(0, Number(time) || 0);
 
-      this.data.playhead = clamp(Number(time), 0, this.duration);
-      this.emit("playhead");
-      return true;
+      this.data.playhead = time;
+      this.notify("playhead");
+      return time;
     }
 
-    setZoom(value) {
-      if (!isNumber(value)) return false;
+    setZoom(zoom) {
+      zoom = clamp(zoom, 0.1, 10);
 
-      this.data.zoom = clamp(Number(value), 0.25, 8);
-      this.emit("zoom");
-      return true;
+      return this.update("zoom", data => {
+        data.zoom = zoom;
+      });
     }
 
     addTrack(type, name) {
       const validTypes = ["video", "audio", "text", "overlay"];
-
       if (!validTypes.includes(type)) return null;
 
       const track = {
@@ -372,12 +252,19 @@
         if (data.selectedTrackId === trackId) {
           data.selectedTrackId = data.tracks[0]?.id || null;
         }
+
+        const clipIds = data.tracks.flatMap(track =>
+          track.clips.map(clip => clip.id)
+        );
+
+        if (!clipIds.includes(data.selectedClipId)) {
+          data.selectedClipId = null;
+        }
       });
     }
 
     addClip(trackId, clipData = {}) {
       const track = this.data.tracks.find(item => item.id === trackId);
-
       if (!track || track.locked) return null;
 
       const start = Math.max(0, Number(clipData.start) || 0);
@@ -391,39 +278,37 @@
         start,
         duration,
         sourceStart: Math.max(0, Number(clipData.sourceStart) || 0),
-        sourceEnd:
-          clipData.sourceEnd !== undefined
-            ? Number(clipData.sourceEnd)
-            : null,
-        volume: clamp(Number(clipData.volume ?? 1), 0, 2),
+        sourceEnd: clipData.sourceEnd !== undefined
+          ? Number(clipData.sourceEnd)
+          : null,
+        volume: clamp(clipData.volume ?? 1, 0, 2),
         muted: Boolean(clipData.muted),
-        speed: clamp(Number(clipData.speed ?? 1), 0.1, 4),
-        opacity: clamp(Number(clipData.opacity ?? 1), 0, 1),
+        speed: clamp(clipData.speed ?? 1, 0.1, 4),
+        opacity: clamp(clipData.opacity ?? 1, 0, 1),
         crop: {
           top: 0,
           bottom: 0,
           left: 0,
-          right: 0
+          right: 0,
+          ...(clone(clipData.crop || {}))
         },
-        effects: [],
+        effects: clone(clipData.effects || []),
         metadata: clone(clipData.metadata || {})
       };
 
-      this.update("add-clip", data => {
+      const result = this.update("add-clip", data => {
         const target = data.tracks.find(item => item.id === trackId);
-
         if (!target || target.locked) {
           throw new Error("Track is locked or missing.");
         }
 
         target.clips.push(clip);
         target.clips.sort((a, b) => a.start - b.start);
-
         data.selectedClipId = clip.id;
         data.selectedTrackId = trackId;
       });
 
-      return clone(clip);
+      return result === false ? null : clone(clip);
     }
 
     findClip(clipId) {
@@ -441,66 +326,43 @@
       return null;
     }
 
+    getClip(clipId) {
+      const found = this.findClip(clipId);
+      return found ? found.clip : null;
+    }
+
     updateClip(clipId, changes = {}) {
       return this.update("update-clip", data => {
-        let found = false;
+        let found = null;
 
-        data.tracks.forEach(track => {
-          const clip = track.clips.find(item => item.id === clipId);
-          if (!clip) return;
-
-          if (track.locked) {
-            throw new Error("Track is locked.");
-          }
-
-          const allowed = [
-            "name",
-            "start",
-            "duration",
-            "sourceStart",
-            "sourceEnd",
-            "volume",
-            "muted",
-            "speed",
-            "opacity",
-            "source",
-            "metadata"
-          ];
-
-          allowed.forEach(key => {
-            if (changes[key] !== undefined) {
-              clip[key] = changes[key];
-            }
-          });
-
-          if (changes.start !== undefined) {
-            clip.start = Math.max(0, Number(clip.start) || 0);
-          }
-
-          if (changes.duration !== undefined) {
-            clip.duration = Math.max(0.01, Number(clip.duration) || 0.01);
-          }
-
-          if (changes.volume !== undefined) {
-            clip.volume = clamp(Number(clip.volume), 0, 2);
-          }
-
-          if (changes.speed !== undefined) {
-            clip.speed = clamp(Number(clip.speed), 0.1, 4);
-          }
-
-          if (changes.opacity !== undefined) {
-            clip.opacity = clamp(Number(clip.opacity), 0, 1);
-          }
-
-          found = true;
-        });
+        for (const track of data.tracks) {
+          found = track.clips.find(item => item.id === clipId);
+          if (found) break;
+        }
 
         if (!found) throw new Error("Clip not found.");
 
-        data.tracks.forEach(track => {
-          track.clips.sort((a, b) => a.start - b.start);
+        const allowed = [
+          "name", "start", "duration", "sourceStart", "sourceEnd",
+          "volume", "muted", "speed", "opacity", "source", "type",
+          "crop", "effects", "metadata"
+        ];
+
+        allowed.forEach(key => {
+          if (changes[key] !== undefined) {
+            found[key] = clone(changes[key]);
+          }
         });
+
+        found.start = Math.max(0, Number(found.start) || 0);
+        found.duration = Math.max(0.01, Number(found.duration) || 0.01);
+        found.speed = clamp(found.speed, 0.1, 4);
+        found.volume = clamp(found.volume, 0, 2);
+        found.opacity = clamp(found.opacity, 0, 1);
+
+        for (const track of data.tracks) {
+          track.clips.sort((a, b) => a.start - b.start);
+        }
       });
     }
 
@@ -510,14 +372,8 @@
 
         data.tracks.forEach(track => {
           const before = track.clips.length;
-
-          track.clips = track.clips.filter(
-            clip => clip.id !== clipId
-          );
-
-          if (track.clips.length !== before) {
-            removed = true;
-          }
+          track.clips = track.clips.filter(clip => clip.id !== clipId);
+          if (track.clips.length !== before) removed = true;
         });
 
         if (!removed) throw new Error("Clip not found.");
@@ -525,41 +381,54 @@
         if (data.selectedClipId === clipId) {
           data.selectedClipId = null;
         }
+
+        return true;
       });
     }
 
-    moveClip(clipId, targetTrackId, newStart) {
+    selectClip(clipId, trackId = null) {
       const found = this.findClip(clipId);
-      const target = this.data.tracks.find(
-        track => track.id === targetTrackId
-      );
+      if (!found) return false;
 
-      if (!found || !target || target.locked) return false;
+      this.data.selectedClipId = clipId;
+      this.data.selectedTrackId = trackId || found.trackId;
+      this.notify("select-clip");
+      return true;
+    }
 
-      return this.transaction("move-clip", data => {
-        const sourceTrack = data.tracks.find(
-          track => track.id === found.trackId
+    getSelectedClip() {
+      return this.getClip(this.data.selectedClipId);
+    }
+
+    moveClip(clipId, newStart, newTrackId = null) {
+      const found = this.findClip(clipId);
+      if (!found) return false;
+
+      newStart = Math.max(0, Number(newStart) || 0);
+
+      return this.update("move-clip", data => {
+        const sourceTrack = data.tracks.find(t => t.id === found.trackId);
+        const clip = sourceTrack.clips.find(c => c.id === clipId);
+        if (!clip) throw new Error("Clip not found.");
+
+        if (newTrackId && newTrackId !== found.trackId) {
+          const targetTrack = data.tracks.find(t => t.id === newTrackId);
+          if (!targetTrack || targetTrack.locked) {
+            throw new Error("Target track unavailable.");
+          }
+
+          sourceTrack.clips = sourceTrack.clips.filter(c => c.id !== clipId);
+          targetTrack.clips.push(clip);
+          clip.type = targetTrack.type;
+        }
+
+        clip.start = newStart;
+
+        data.tracks.forEach(track =>
+          track.clips.sort((a, b) => a.start - b.start)
         );
-
-        const sourceIndex = sourceTrack.clips.findIndex(
-          clip => clip.id === clipId
-        );
-
-        if (sourceIndex < 0) throw new Error("Clip not found.");
-
-        const [clip] = sourceTrack.clips.splice(sourceIndex, 1);
-
-        clip.start = Math.max(0, Number(newStart) || 0);
-
-        const destination = data.tracks.find(
-          track => track.id === targetTrackId
-        );
-
-        destination.clips.push(clip);
-        destination.clips.sort((a, b) => a.start - b.start);
 
         data.selectedClipId = clipId;
-        data.selectedTrackId = targetTrackId;
       });
     }
 
@@ -567,257 +436,184 @@
       const found = this.findClip(clipId);
       if (!found) return null;
 
-      const clip = found.clip;
-      const localTime = Number(splitTime) - clip.start;
+      const original = found.clip;
+      const localTime = Number(splitTime) - original.start;
 
-      if (localTime <= 0.01 || localTime >= clip.duration - 0.01) {
+      if (localTime <= 0.01 || localTime >= original.duration - 0.01) {
         return null;
       }
 
       const firstDuration = localTime;
-      const secondDuration = clip.duration - localTime;
-
-      const first = {
-        ...clip,
-        duration: firstDuration
-      };
+      const secondDuration = original.duration - localTime;
+      const secondSourceStart =
+        original.sourceStart + localTime * original.speed;
 
       const second = {
-        ...clip,
+        ...original,
         id: createId("clip"),
-        start: clip.start + localTime,
+        start: original.start + localTime,
         duration: secondDuration,
-        sourceStart: clip.sourceStart + localTime * clip.speed
+        sourceStart: secondSourceStart,
+        sourceEnd: original.sourceEnd
       };
 
-      this.update("split-clip", data => {
-        const track = data.tracks.find(
-          item => item.id === found.trackId
-        );
+      const result = this.update("split-clip", data => {
+        const track = data.tracks.find(t => t.id === found.trackId);
+        const clip = track?.clips.find(c => c.id === clipId);
+        if (!clip) throw new Error("Clip not found.");
 
-        const index = track.clips.findIndex(
-          item => item.id === clipId
-        );
-
-        if (index < 0 || track.locked) {
-          throw new Error("Clip cannot be split.");
-        }
-
-        track.clips.splice(index, 1, first, second);
+        clip.duration = firstDuration;
+        clip.sourceEnd = secondSourceStart;
+        track.clips.push(second);
+        track.clips.sort((a, b) => a.start - b.start);
         data.selectedClipId = second.id;
       });
 
-      return {
-        first: clone(first),
-        second: clone(second)
-      };
+      return result === false ? null : clone(second);
     }
 
-    setCrop(clipId, crop = {}) {
-      const allowed = ["top", "bottom", "left", "right"];
-
-      return this.update("crop-clip", data => {
-        let found = false;
-
-        data.tracks.forEach(track => {
-          const clip = track.clips.find(item => item.id === clipId);
-          if (!clip) return;
-
-          allowed.forEach(side => {
-            if (crop[side] !== undefined) {
-              clip.crop[side] = clamp(
-                Number(crop[side]) || 0,
-                0,
-                95
-              );
-            }
-          });
-
-          found = true;
-        });
-
-        if (!found) throw new Error("Clip not found.");
-      });
-    }
-
-    selectClip(clipId) {
-      const found = this.findClip(clipId);
-      if (!found) return false;
-
-      this.data.selectedClipId = clipId;
-      this.data.selectedTrackId = found.trackId;
-
-      this.emit("select-clip");
-      return true;
-    }
-
-    selectTrack(trackId) {
-      if (!this.data.tracks.some(track => track.id === trackId)) {
-        return false;
-      }
-
-      this.data.selectedTrackId = trackId;
-      this.emit("select-track");
-      return true;
-    }
-
-    addTextLayer(textData = {}) {
+    addTextLayer(text = "Your text", options = {}) {
       const layer = {
         id: createId("text"),
-        text: String(textData.text || "Your text"),
-        x: Number(textData.x ?? 50),
-        y: Number(textData.y ?? 50),
-        width: Number(textData.width ?? 80),
-        fontSize: Number(textData.fontSize ?? 64),
-        fontFamily: textData.fontFamily || "Arial",
-        fontWeight: textData.fontWeight || "700",
-        color: textData.color || "#ffffff",
-        background: textData.background || "transparent",
-        align: textData.align || "center",
-        style: textData.style || "clean",
-        start: Math.max(0, Number(textData.start) || 0),
-        duration: Math.max(0.1, Number(textData.duration) || 5),
-        opacity: clamp(Number(textData.opacity ?? 1), 0, 1),
-        rotation: Number(textData.rotation || 0),
-        animation: textData.animation || "none"
+        text: String(text),
+        x: Number(options.x ?? 0.5),
+        y: Number(options.y ?? 0.5),
+        fontSize: Number(options.fontSize ?? 64),
+        fontFamily: String(options.fontFamily || "Arial"),
+        color: String(options.color || "#ffffff"),
+        background: String(options.background || "transparent"),
+        align: options.align || "center",
+        bold: Boolean(options.bold),
+        italic: Boolean(options.italic),
+        start: Math.max(0, Number(options.start) || 0),
+        duration: Math.max(0.01, Number(options.duration) || 5),
+        opacity: clamp(options.opacity ?? 1, 0, 1),
+        rotation: Number(options.rotation) || 0
       };
 
-      this.update("add-text", data => {
+      const result = this.update("add-text", data => {
         data.textLayers.push(layer);
+        data.selectedTextId = layer.id;
       });
 
-      return clone(layer);
+      return result === false ? null : clone(layer);
     }
 
-    updateTextLayer(layerId, changes = {}) {
-      const allowed = [
-        "text",
-        "x",
-        "y",
-        "width",
-        "fontSize",
-        "fontFamily",
-        "fontWeight",
-        "color",
-        "background",
-        "align",
-        "style",
-        "start",
-        "duration",
-        "opacity",
-        "rotation",
-        "animation"
-      ];
-
+    updateTextLayer(id, changes = {}) {
       return this.update("update-text", data => {
-        const layer = data.textLayers.find(
-          item => item.id === layerId
-        );
-
+        const layer = data.textLayers.find(item => item.id === id);
         if (!layer) throw new Error("Text layer not found.");
+
+        const allowed = [
+          "text", "x", "y", "fontSize", "fontFamily", "color",
+          "background", "align", "bold", "italic", "start",
+          "duration", "opacity", "rotation"
+        ];
 
         allowed.forEach(key => {
           if (changes[key] !== undefined) {
             layer[key] = changes[key];
           }
         });
-
-        layer.x = clamp(Number(layer.x) || 0, 0, 100);
-        layer.y = clamp(Number(layer.y) || 0, 0, 100);
-        layer.opacity = clamp(Number(layer.opacity) || 0, 0, 1);
-        layer.fontSize = clamp(Number(layer.fontSize) || 1, 1, 500);
       });
     }
 
-    removeTextLayer(layerId) {
+    removeTextLayer(id) {
       return this.update("remove-text", data => {
-        const before = data.textLayers.length;
+        data.textLayers = data.textLayers.filter(item => item.id !== id);
 
-        data.textLayers = data.textLayers.filter(
-          layer => layer.id !== layerId
-        );
-
-        if (before === data.textLayers.length) {
-          throw new Error("Text layer not found.");
+        if (data.selectedTextId === id) {
+          data.selectedTextId = null;
         }
       });
     }
 
-    addEffect(effectData = {}) {
+    addEffect(type, options = {}) {
       const effect = {
         id: createId("effect"),
-        name: String(effectData.name || "Effect"),
-        type: String(effectData.type || "basic"),
+        type: String(type || "brightness"),
         enabled: true,
-        intensity: clamp(
-          Number(effectData.intensity ?? 50),
-          0,
-          100
-        ),
-        settings: clone(effectData.settings || {}),
-        clipId: effectData.clipId || null
+        intensity: clamp(options.intensity ?? 1, 0, 2),
+        options: clone(options)
       };
 
-      this.update("add-effect", data => {
+      const result = this.update("add-effect", data => {
         data.effects.push(effect);
       });
 
-      return clone(effect);
+      return result === false ? null : clone(effect);
     }
 
-    updateEffect(effectId, changes = {}) {
+    updateEffect(id, changes = {}) {
       return this.update("update-effect", data => {
-        const effect = data.effects.find(
-          item => item.id === effectId
-        );
-
+        const effect = data.effects.find(item => item.id === id);
         if (!effect) throw new Error("Effect not found.");
 
-        if (changes.name !== undefined) {
-          effect.name = String(changes.name);
-        }
-
-        if (changes.enabled !== undefined) {
-          effect.enabled = Boolean(changes.enabled);
-        }
-
-        if (changes.intensity !== undefined) {
-          effect.intensity = clamp(
-            Number(changes.intensity) || 0,
-            0,
-            100
-          );
-        }
-
-        if (changes.settings !== undefined) {
-          effect.settings = clone(changes.settings);
-        }
+        ["type", "enabled", "intensity", "options"].forEach(key => {
+          if (changes[key] !== undefined) {
+            effect[key] = clone(changes[key]);
+          }
+        });
       });
     }
 
-    removeEffect(effectId) {
+    removeEffect(id) {
       return this.update("remove-effect", data => {
-        const before = data.effects.length;
-
-        data.effects = data.effects.filter(
-          effect => effect.id !== effectId
-        );
-
-        if (before === data.effects.length) {
-          throw new Error("Effect not found.");
-        }
+        data.effects = data.effects.filter(item => item.id !== id);
       });
     }
 
     exportProject() {
-      const project = this.getState();
-
-      return {
-        format: "vyora-project",
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        project
-      };
+      return JSON.stringify(this.data, null, 2);
     }
 
-    importProje
+    importProject(json) {
+      let imported;
+
+      try {
+        imported = typeof json === "string" ? JSON.parse(json) : clone(json);
+      } catch {
+        throw new Error("Invalid project JSON.");
+      }
+
+      if (!imported || !Array.isArray(imported.tracks)) {
+        throw new Error("Invalid project file.");
+      }
+
+      const validTracks = imported.tracks.every(track =>
+        track &&
+        typeof track.id === "string" &&
+        ["video", "audio", "text", "overlay"].includes(track.type) &&
+        Array.isArray(track.clips)
+      );
+
+      if (!validTracks) {
+        throw new Error("Project contains invalid tracks.");
+      }
+
+      this.saveHistory();
+
+      this.data = {
+        ...this.createDefaultProject(),
+        ...imported,
+        tracks: clone(imported.tracks),
+        textLayers: Array.isArray(imported.textLayers)
+          ? clone(imported.textLayers)
+          : [],
+        effects: Array.isArray(imported.effects)
+          ? clone(imported.effects)
+          : []
+      };
+
+      this.notify("import-project");
+      return this.getSnapshot();
+    }
+
+    clear() {
+      return this.newProject();
+    }
+  }
+
+  window.VYORAProject = new ProjectManager();
+})();
+        
