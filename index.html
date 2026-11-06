@@ -1,322 +1,273 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#090912">
-<title>VYORA Studio</title>
-<style>
-:root{
-  --bg:#090912;--surface:#151525;--surface2:#1d1d31;
-  --line:#ffffff14;--muted:#9292aa;--white:#f8f7ff;
-  --purple:#a47aff;--cyan:#53e0e9;--pink:#ed80cf;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;background:
-  radial-gradient(ellipse at 10% 0%,#5931a52c,transparent 40%),
-  radial-gradient(ellipse at 100% 50%,#147c8d19,transparent 38%),var(--bg);
-  color:var(--white);font-family:Inter,system-ui,Arial,sans-serif;
-  min-height:100vh
-}
-button,input,select,textarea{font:inherit}
-button{cursor:pointer;color:inherit}
-.app{width:min(100%,760px);margin:auto;padding:17px 15px 35px}
-.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.brand{display:flex;gap:11px;align-items:center}
-.logo{
-  width:43px;height:43px;border-radius:15px;display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--purple),var(--cyan));
-  color:#090912;font-weight:1000;font-size:23px;
-  box-shadow:0 0 30px #9c6dff44
-}
-.brand b{font-size:19px;letter-spacing:2px}
-.brand small{display:block;color:var(--muted);font-size:9px;letter-spacing:3px}
-.icon{
-  width:42px;height:42px;border:1px solid var(--line);
-  border-radius:14px;background:#ffffff08;font-size:18px
-}
-.glass{
-  background:linear-gradient(145deg,#ffffff0d,#ffffff04);
-  border:1px solid var(--line);border-radius:21px;
-  box-shadow:0 15px 40px #0004,inset 0 1px #ffffff08;
-  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)
-}
-.screen{display:none;animation:enter .25s ease}
-.screen.active{display:block}
-@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.hero{
-  padding:28px 23px;min-height:310px;display:flex;flex-direction:column;
-  justify-content:flex-end;position:relative;overflow:hidden;
-  background:
-  radial-gradient(circle at 82% 25%,#9e68ff70,transparent 32%),
-  radial-gradient(circle at 95% 80%,#45e1eb38,transparent 35%),
-  linear-gradient(145deg,#25203d,#121425 65%,#101c2b)
-}
-.hero:before{
-  content:"V";position:absolute;right:8px;top:-45px;
-  font-size:210px;font-weight:1000;color:#ffffff08
-}
-.kicker{font-size:10px;letter-spacing:3px;color:#c5b3ff;font-weight:800}
-.hero h1{font-size:clamp(37px,9vw,57px);line-height:1.02;letter-spacing:-2px;margin:13px 0}
-.hero p{font-size:13px;line-height:1.7;color:#c2c0d3;max-width:390px}
-.primary{
-  border:0;border-radius:14px;padding:15px 19px;font-weight:850;
-  color:#080812;background:linear-gradient(100deg,#b18aff,#5ce2ec);
-  box-shadow:0 8px 27px #8b61e84a
-}
-.secondary{
-  border:1px solid var(--line);border-radius:14px;
-  padding:13px;background:#ffffff08;font-weight:700
-}
-.primary:disabled{opacity:.35}
-.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}
-.pill{font-size:10px;color:#d2c9ef;border:1px solid #ffffff1b;background:#ffffff08;border-radius:30px;padding:7px 10px}
-.heading{display:flex;justify-content:space-between;align-items:center;margin:25px 2px 12px}
-.heading b{font-size:16px}.heading small{color:var(--muted);font-size:10px}
-.features{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.feature{padding:15px;min-height:100px}
-.feature i{font-style:normal;font-size:22px}
-.feature b{display:block;font-size:12px;margin-top:9px}
-.feature small{display:block;color:var(--muted);font-size:10px;margin-top:4px}
-.pagehead{display:flex;align-items:center;gap:12px;margin:7px 0 18px}
-.back{width:40px;height:40px;border:1px solid var(--line);background:#ffffff08;border-radius:13px;font-size:21px}
-.pagehead h2{font-size:19px;margin:0}.pagehead p{font-size:11px;color:var(--muted);margin:4px 0 0}
-.progress{display:flex;gap:5px;margin-bottom:18px}
-.progress span{height:3px;flex:1;background:#ffffff18;border-radius:8px}
-.progress span.on{background:linear-gradient(90deg,var(--purple),var(--cyan))}
-.card{padding:16px;margin-bottom:12px}
-.card b{font-size:13px}.desc{font-size:11px;color:var(--muted);line-height:1.6;margin-top:5px}
-.drop{
-  text-align:center;padding:28px 15px;border:1px dashed #a47aff88;
-  background:#9d72ff0b;border-radius:17px
-}
-.drop .symbol{font-size:34px;margin-bottom:8px}
-.drop h3{font-size:16px;margin:0 0 6px}
-.drop p{font-size:11px;color:var(--muted);margin:0 0 14px}
-.hidden{display:none}
-.previewbox{
-  background:#05050a;border:1px solid var(--line);border-radius:17px;
-  padding:12px;display:flex;justify-content:center;align-items:center;
-  min-height:210px;overflow:hidden
-}
-.stage{
-  position:relative;width:min(100%,310px);aspect-ratio:9/16;
-  max-height:390px;background:#151525;border-radius:8px;overflow:hidden;
-  display:grid;place-items:center
-}
-.stage video,.stage img{width:100%;height:100%;object-fit:contain}
-.stage .caption{
-  position:absolute;left:5%;right:5%;top:50%;transform:translateY(-50%);
-  text-align:center;font-weight:900;font-size:28px;color:white;
-  white-space:pre-wrap;overflow-wrap:anywhere;text-shadow:2px 3px 5px #000
-}
-.empty{text-align:center;color:#777990;font-size:11px;padding:15px}
-.empty strong{display:block;font-size:26px;color:#b99aff;margin-bottom:8px}
-.ratios{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
-.choice{
-  min-height:75px;padding:9px 4px;border:1px solid var(--line);
-  border-radius:13px;background:#ffffff07;text-align:center
-}
-.choice.active,.chip.active,.preset.active{
-  border-color:var(--purple);background:#a47aff25
-}
-.shape{border:2px solid #c6aaff;border-radius:3px;margin:0 auto 7px}
-.choice b{font-size:11px;display:block}.choice small{font-size:9px;color:var(--muted)}
-.presets{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:13px}
-.preset,.chip{
-  border:1px solid var(--line);background:#ffffff08;border-radius:11px;
-  padding:11px 5px;font-size:11px;font-weight:750
-}
-.range{margin:17px 0}
-.range label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:8px}
-.range output{color:#c2a6ff;font-weight:800}
-input[type=range]{width:100%;accent-color:#a47aff}
-input[type=text],input[type=number],select{
-  width:100%;background:#0c0d19;color:white;border:1px solid var(--line);
-  border-radius:11px;padding:12px;outline:none
-}
-input[type=color]{width:42px;height:35px;border:0;background:none}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.actions{display:flex;gap:9px;margin-top:17px}
-.actions button{flex:1}
-.samples{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}
-.sample{
-  min-height:85px;border:1px solid var(--line);border-radius:13px;
-  background:linear-gradient(145deg,#302343,#111725);
-  display:grid;place-items:center;text-align:center;padding:10px
-}
-.sample.active{border-color:var(--purple)}
-.s1{font-size:21px;font-weight:1000;letter-spacing:2px;text-shadow:2px 3px #000}
-.s2{font-size:20px;color:#83eaff;font-weight:1000;text-shadow:0 0 12px #4beaff}
-.s3{font-size:20px;font-style:italic;font-weight:900;color:#e7b8ff}
-.s4{font-size:17px;color:#ffce83;font-weight:1000}
-.s5{font-size:20px;letter-spacing:3px;font-weight:900}
-.timeline{background:#080912;border:1px solid var(--line);padding:12px;border-radius:13px}
-.track{height:35px;background:#ffffff09;border-radius:7px;margin:8px 0;position:relative;overflow:hidden}
-.clip{position:absolute;inset:3px auto 3px 0;width:75%;border-radius:5px;background:linear-gradient(90deg,#7954dd,#32aeba)}
-.status{font-size:10px;color:var(--muted);line-height:1.6;margin-top:10px}
-.toast{
-  position:fixed;z-index:9999;bottom:20px;left:50%;transform:translate(-50%,20px);
-  opacity:0;pointer-events:none;background:#29243e;border:1px solid #ffffff22;
-  border-radius:30px;padding:12px 17px;font-size:12px;transition:.2s;
-  max-width:90%;text-align:center
-}
-.toast.show{opacity:1;transform:translate(-50%,0)}
-@media(min-width:600px){
- .app{padding:25px}.hero{min-height:350px;padding:35px}
- .features{grid-template-columns:repeat(4,1fr)}
- .ratios{grid-template-columns:repeat(5,1fr)}
- .samples{grid-template-columns:repeat(5,1fr)}
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#090a12">
+  <meta name="description" content="VYORA Studio — Create videos with precision.">
+  <title>VYORA Studio</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/editor.css">
+
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
+
 <body>
-<div class="app">
-<header class="top">
- <div class="brand"><div class="logo">V</div><div><b>VYORA</b><small>CREATIVE STUDIO</small></div></div>
- <button class="icon" id="notice">♢</button>
-</header>
+  <div id="app" class="app-shell">
 
-<section class="screen active" id="home">
- <div class="hero glass">
-  <div class="kicker">CREATE • EDIT • INSPIRE</div>
-  <h1>Make every<br>frame matter.</h1>
-  <p>A creative video studio for cinematic stories, expressive typography, music and motion.</p>
-  <button class="primary" id="start">Start your video edit&nbsp; →</button>
-  <div class="pills"><span class="pill">✦ Creative tools</span><span class="pill">◈ Premium workspace</span><span class="pill">⌁ Mobile first</span></div>
- </div>
- <div class="heading"><b>Your creative space</b><small>MADE TO CREATE</small></div>
- <div class="features">
-  <div class="feature glass"><i>▣</i><b>Precision editing</b><small>Trim, crop and frame</small></div>
-  <div class="feature glass"><i>Aa</i><b>Typography</b><small>Design expressive text</small></div>
-  <div class="feature glass"><i>♫</i><b>Audio studio</b><small>Music and volume</small></div>
-  <div class="feature glass"><i>✧</i><b>Visual effects</b><small>Colour and filters</small></div>
- </div>
- <div class="heading"><b>Recent projects</b><small id="recentCount">0 projects</small></div>
- <div class="card glass desc" id="recent">Your next creation will appear here.</div>
-</section>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="VYORA Studio home" id="homeBrand">
+        <span class="brand-mark">V</span>
+        <span class="brand-name">VYORA<span>STUDIO</span></span>
+      </a>
 
-<section class="screen" id="import">
- <div class="pagehead"><button class="back" data-back="home">‹</button><div><h2>Import media</h2><p>Start with a video from your device</p></div></div>
- <div class="progress" data-step="1"></div>
- <div class="drop">
-  <div class="symbol">⇧</div><h3>Bring your video to life</h3><p>Choose a video file from your phone</p>
-  <button class="primary" id="pickVideo">Import video</button>
-  <input class="hidden" id="videoFile" type="file" accept="video/*">
- </div>
- <div class="card glass"><b>Selected video</b><div class="desc" id="fileInfo">No video selected.</div></div>
- <div class="previewbox"><div class="stage" id="importStage"><div class="empty"><strong>▶</strong>Video preview</div></div></div>
- <div class="actions"><button class="secondary" data-back="home">Cancel</button><button class="primary" id="nextRatio" disabled>Next →</button></div>
-</section>
+      <div class="topbar-actions">
+        <button class="icon-button" id="notificationsButton" aria-label="Notifications">
+          <i data-lucide="bell"></i>
+          <span class="notification-dot"></span>
+        </button>
+        <button class="avatar-button" id="profileButton" aria-label="Profile">V</button>
+      </div>
+    </header>
 
-<section class="screen" id="ratio">
- <div class="pagehead"><button class="back" data-back="import">‹</button><div><h2>Choose your frame</h2><p>Pick the format for your platform</p></div></div>
- <div class="progress" data-step="2"></div>
- <div class="card glass"><b>Aspect ratio</b><div class="desc">Choose a canvas for your project.</div><div class="ratios" id="ratioChoices"></div></div>
- <div class="previewbox"><div class="stage" id="ratioStage"><div class="empty">Canvas preview</div></div></div>
- <div class="actions"><button class="secondary" data-back="import">Back</button><button class="primary" id="nextCrop">Next →</button></div>
-</section>
+    <main id="mainContent">
 
-<section class="screen" id="crop">
- <div class="pagehead"><button class="back" data-back="ratio">‹</button><div><h2>Crop & safe area</h2><p>Adjust top and bottom edges</p></div></div>
- <div class="progress" data-step="3"></div>
- <div class="card glass">
-  <b>Quick bottom crop</b><div class="desc">Choose a preset to crop the lower edge.</div>
-  <div class="presets" id="cropPresets">
-   <button class="preset active" data-crop="0">0%</button><button class="preset" data-crop="5">5%</button><button class="preset" data-crop="10">10%</button><button class="preset" data-crop="20">20%</button>
+      <section class="screen active" id="homeScreen">
+        <div class="home-hero">
+          <div class="hero-orb orb-one"></div>
+          <div class="hero-orb orb-two"></div>
+
+          <div class="hero-content">
+            <div class="eyebrow">
+              <span class="live-dot"></span>
+              YOUR CREATIVE SPACE
+            </div>
+
+            <h1>Make every<br><span>frame matter.</span></h1>
+
+            <p class="hero-description">
+              A powerful creative studio for your next visual story.
+              Import your footage and bring your ideas to life.
+            </p>
+
+            <button class="primary-button hero-start" id="startEditingButton">
+              <span>Start your video edit</span>
+              <i data-lucide="arrow-up-right"></i>
+            </button>
+
+            <div class="hero-footnote">
+              <i data-lucide="shield-check"></i>
+              Your media stays on your device
+            </div>
+          </div>
+
+          <div class="hero-art" aria-hidden="true">
+            <div class="art-ring ring-one"></div>
+            <div class="art-ring ring-two"></div>
+            <div class="art-core">
+              <div class="art-play"><i data-lucide="play"></i></div>
+            </div>
+            <div class="art-chip chip-top">CREATIVE</div>
+            <div class="art-chip chip-bottom">STUDIO / 01</div>
+          </div>
+        </div>
+
+        <section class="home-section">
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">GET STARTED</span>
+              <h2>Your next project</h2>
+            </div>
+            <span class="section-count">01 / 03</span>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <div class="feature-icon purple"><i data-lucide="video"></i></div>
+              <h3>Video editing</h3>
+              <p>Trim, crop and shape your footage.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon cyan"><i data-lucide="type"></i></div>
+              <h3>Creative titles</h3>
+              <p>Give your story its own identity.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon pink"><i data-lucide="audio-lines"></i></div>
+              <h3>Sound design</h3>
+              <p>Build the right mood with audio.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="home-section privacy-card">
+          <div class="privacy-icon"><i data-lucide="lock-keyhole"></i></div>
+          <div>
+            <h3>Private by design</h3>
+            <p>Your selected media is processed locally in your browser. It is not uploaded to a VYORA server.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="screen" id="importScreen">
+        <div class="screen-heading">
+          <button class="back-button" data-back="homeScreen" aria-label="Go back">
+            <i data-lucide="arrow-left"></i>
+          </button>
+          <div>
+            <span class="section-kicker">NEW PROJECT</span>
+            <h2>Import your footage</h2>
+          </div>
+        </div>
+
+        <div class="import-layout">
+          <label class="drop-zone" id="videoDropZone" for="videoInput">
+            <input id="videoInput" type="file" accept="video/*" hidden>
+            <span class="drop-icon"><i data-lucide="cloud-upload"></i></span>
+            <strong>Choose a video</strong>
+            <span class="drop-copy">Tap to browse your device</span>
+            <span class="drop-format">MP4 · MOV · WEBM · M4V</span>
+          </label>
+
+          <div class="selected-file hidden" id="selectedFileCard">
+            <div class="file-preview">
+              <video id="importPreview" playsinline muted></video>
+              <span class="file-play-icon"><i data-lucide="play"></i></span>
+            </div>
+            <div class="file-information">
+              <strong id="selectedFileName">No video selected</strong>
+              <span id="selectedFileMeta">—</span>
+            </div>
+            <button class="icon-button danger" id="removeVideoButton" aria-label="Remove video">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+
+          <div class="import-note">
+            <i data-lucide="info"></i>
+            <p>For smoother editing, start with a short video. Large 4K files may be demanding on mobile devices.</p>
+          </div>
+
+          <button class="primary-button full-width" id="continueToRatioButton" disabled>
+            Continue <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </section>
+
+      <section class="screen" id="ratioScreen">
+        <div class="screen-heading">
+          <button class="back-button" data-back="importScreen" aria-label="Go back">
+            <i data-lucide="arrow-left"></i>
+          </button>
+          <div>
+            <span class="section-kicker">PROJECT SETUP</span>
+            <h2>Choose your canvas</h2>
+            <p>Select the frame shape for your video.</p>
+          </div>
+        </div>
+
+        <div class="ratio-grid" id="ratioGrid">
+          <button class="ratio-option selected" data-ratio="9:16">
+            <span class="ratio-shape shape-vertical"></span>
+            <strong>9:16</strong><small>Reels / Shorts</small>
+          </button>
+          <button class="ratio-option" data-ratio="16:9">
+            <span class="ratio-shape shape-horizontal"></span>
+            <strong>16:9</strong><small>YouTube</small>
+          </button>
+          <button class="ratio-option" data-ratio="1:1">
+            <span class="ratio-shape shape-square"></span>
+            <strong>1:1</strong><small>Square</small>
+          </button>
+          <button class="ratio-option" data-ratio="4:5">
+            <span class="ratio-shape shape-four-five"></span>
+            <strong>4:5</strong><small>Portrait post</small>
+          </button>
+          <button class="ratio-option" data-ratio="5:4">
+            <span class="ratio-shape shape-five-four"></span>
+            <strong>5:4</strong><small>Landscape post</small>
+          </button>
+          <button class="ratio-option" data-ratio="3:4">
+            <span class="ratio-shape shape-three-four"></span>
+            <strong>3:4</strong><small>Portrait</small>
+          </button>
+          <button class="ratio-option" data-ratio="4:3">
+            <span class="ratio-shape shape-four-three"></span>
+            <strong>4:3</strong><small>Classic</small>
+          </button>
+          <button class="ratio-option" data-ratio="2:3">
+            <span class="ratio-shape shape-two-three"></span>
+            <strong>2:3</strong><small>Poster</small>
+          </button>
+          <button class="ratio-option" data-ratio="3:2">
+            <span class="ratio-shape shape-three-two"></span>
+            <strong>3:2</strong><small>Photo</small>
+          </button>
+          <button class="ratio-option" data-ratio="21:9">
+            <span class="ratio-shape shape-wide"></span>
+            <strong>21:9</strong><small>Cinematic</small>
+          </button>
+          <button class="ratio-option" data-ratio="9:21">
+            <span class="ratio-shape shape-tall"></span>
+            <strong>9:21</strong><small>Full vertical</small>
+          </button>
+          <button class="ratio-option" data-ratio="2.35:1">
+            <span class="ratio-shape shape-cinema"></span>
+            <strong>2.35:1</strong><small>Widescreen</small>
+          </button>
+          <button class="ratio-option" data-ratio="1.85:1">
+            <span class="ratio-shape shape-film"></span>
+            <strong>1.85:1</strong><small>Film</small>
+          </button>
+          <button class="ratio-option" data-ratio="1:2">
+            <span class="ratio-shape shape-story"></span>
+            <strong>1:2</strong><small>Story tall</small>
+          </button>
+          <button class="ratio-option" data-ratio="custom">
+            <span class="ratio-shape shape-custom"><i data-lucide="sliders-horizontal"></i></span>
+            <strong>Custom</strong><small>Set your own</small>
+          </button>
+        </div>
+
+        <div class="custom-ratio-panel hidden" id="customRatioPanel">
+          <label>Width <input type="number" id="customRatioWidth" min="1" max="8192" value="1080"></label>
+          <span>:</span>
+          <label>Height <input type="number" id="customRatioHeight" min="1" max="8192" value="1920"></label>
+        </div>
+
+        <button class="primary-button full-width" id="continueToEditorButton">
+          Open editor <i data-lucide="arrow-right"></i>
+        </button>
+      </section>
+
+      <section class="screen" id="editorScreen">
+        <div id="editorMount"></div>
+      </section>
+
+    </main>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="modal-backdrop hidden" id="modalBackdrop">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-top">
+          <h3 id="modalTitle">VYORA Studio</h3>
+          <button class="icon-button" id="closeModalButton" aria-label="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div id="modalBody"></div>
+      </div>
+    </div>
+
   </div>
-  <div class="range"><label>Bottom crop <output id="bottomOut">0%</output></label><input id="bottom" type="range" min="0" max="20" value="0"></div>
- </div>
- <div class="card glass">
-  <b>Equal top + bottom</b><div class="desc">Crop the same amount from both edges.</div>
-  <div class="range"><label>Both edges <output id="equalOut">0%</output></label><input id="equal" type="range" min="0" max="20" value="0"></div>
- </div>
- <div class="card glass">
-  <b>Manual adjustment</b><div class="desc">Set each edge independently. Example: top 5%, bottom 8%.</div>
-  <div class="range"><label>Top <output id="topOut">0%</output></label><input id="topCrop" type="range" min="0" max="20" value="0"></div>
-  <div class="range"><label>Bottom <output id="manualBottomOut">0%</output></label><input id="manualBottom" type="range" min="0" max="20" value="0"></div>
- </div>
- <div class="card glass"><b>Live preview</b><div class="previewbox"><div class="stage" id="cropStage"><div class="empty">Crop preview</div></div></div><div class="status">Crop removes edge pixels. It does not intelligently erase a logo from inside the video.</div></div>
- <div class="actions"><button class="secondary" data-back="ratio">Back</button><button class="primary" id="nextTrim">Next →</button></div>
-</section>
 
-<section class="screen" id="trim">
- <div class="pagehead"><button class="back" data-back="crop">‹</button><div><h2>Trim studio</h2><p>Choose exactly which moments to keep</p></div></div>
- <div class="progress" data-step="4"></div>
- <div class="previewbox"><div class="stage" id="trimStage"><div class="empty">Trim preview</div></div></div>
- <div class="card glass">
-  <b>Clip range</b>
-  <div class="range"><label>Start <output id="startOut">0.0s</output></label><input id="trimStart" type="range" min="0" max="100" value="0" step=".1"></div>
-  <div class="range"><label>End <output id="endOut">0.0s</output></label><input id="trimEnd" type="range" min="0" max="100" value="100" step=".1"></div>
-  <div class="row"><button class="chip" id="playVideo">▶ Play</button><button class="chip" id="pauseVideo">Ⅱ Pause</button><button class="chip" id="resetTrim">Reset</button></div>
-  <div class="status" id="trimInfo">Choose the start and end of your final clip.</div>
- </div>
- <div class="card glass">
-  <b>Timeline preview</b><div class="timeline"><div class="desc">VIDEO 1</div><div class="track"><div class="clip"></div></div><div class="desc">Your selected range is highlighted in the preview.</div></div>
- </div>
- <div class="actions"><button class="secondary" data-back="crop">Back</button><button class="primary" id="nextText">Next →</button></div>
-</section>
-
-<section class="screen" id="text">
- <div class="pagehead"><button class="back" data-back="trim">‹</button><div><h2>Text studio</h2><p>Make your words part of the visual</p></div></div>
- <div class="progress" data-step="5"></div>
- <div class="previewbox"><div class="stage" id="textStage"><div class="empty">Text preview</div></div></div>
- <div class="card glass"><b>Premium text samples</b><div class="samples" id="samples">
-  <button class="sample active" data-style="0"><span class="s1">YOUR<br>STORY</span></button>
-  <button class="sample" data-style="1"><span class="s2">NEON<br>LIGHTS</span></button>
-  <button class="sample" data-style="2"><span class="s3">Dream<br>in motion</span></button>
-  <button class="sample" data-style="3"><span class="s4">CINEMATIC</span></button>
-  <button class="sample" data-style="4"><span class="s5">V I B E</span></button>
- </div></div>
- <div class="card glass">
-  <b>Customize text</b><div style="height:10px"></div>
-  <input id="titleText" type="text" value="YOUR STORY" placeholder="Write your title">
-  <div class="range"><label>Text size <output id="sizeOut">30px</output></label><input id="textSize" type="range" min="14" max="70" value="30"></div>
-  <div class="row" style="align-items:center"><span class="desc">Text colour</span><input id="textColor" type="color" value="#ffffff"><button class="chip" id="boldText">Bold</button><button class="chip" id="glowText">Glow</button><button class="chip" id="outlineText">Outline</button></div>
- </div>
- <div class="actions"><button class="secondary" data-back="trim">Back</button><button class="primary" id="nextAudio">Next →</button></div>
-</section>
-
-<section class="screen" id="audio">
- <div class="pagehead"><button class="back" data-back="text">‹</button><div><h2>Audio studio</h2><p>Give your edit its soundtrack</p></div></div>
- <div class="progress" data-step="6"></div>
- <div class="drop"><div class="symbol">♫</div><h3>Add your soundtrack</h3><p>Choose music or audio from your device</p><button class="primary" id="pickAudio">Import audio</button><input class="hidden" id="audioFile" type="file" accept="audio/*"></div>
- <div class="card glass"><b>Selected audio</b><div class="desc" id="audioInfo">No audio selected.</div></div>
- <div class="card glass">
-  <b>Sound controls</b>
-  <div class="range"><label>Volume <output id="volumeOut">100%</output></label><input id="volume" type="range" min="0" max="100" value="100"></div>
-  <div class="row"><div style="flex:1"><div class="desc">Fade in (sec)</div><input id="fadeIn" type="number" min="0" max="20" value="0"></div><div style="flex:1"><div class="desc">Fade out (sec)</div><input id="fadeOut" type="number" min="0" max="20" value="0"></div></div>
-  <div class="row" style="margin-top:12px"><button class="chip" id="audioPlay">▶ Preview music</button><button class="chip" id="audioStop">■ Stop</button></div>
- </div>
- <div class="actions"><button class="secondary" data-back="text">Back</button><button class="primary" id="nextEffects">Next →</button></div>
-</section>
-
-<section class="screen" id="effects">
- <div class="pagehead"><button class="back" data-back="audio">‹</button><div><h2>Visual effects</h2><p>Find the look that feels like yours</p></div></div>
- <div class="progress" data-step="7"></div>
- <div class="previewbox"><div class="stage" id="effectsStage"><div class="empty">Effects preview</div></div></div>
- <div class="card glass"><b>Visual presets</b><div class="row" id="filters" style="margin-top:12px">
-  <button class="chip active" data-filter="none">Original</button><button class="chip" data-filter="cinematic">Cinematic</button><button class="chip" data-filter="vintage">Vintage</button><button class="chip" data-filter="mono">B&W</button><button class="chip" data-filter="dream">Dream</button><button class="chip" data-filter="vivid">Vivid</button>
- </div></div>
- <div class="card glass">
-  <b>Fine adjustments</b>
-  <div class="range"><label>Brightness <output id="brightOut">100%</output></label><input id="brightness" type="range" min="50" max="150" value="100"></div>
-  <div class="range"><label>Contrast <output id="contrastOut">100%</output></label><input id="contrast" type="range" min="50" max="180" value="100"></div>
-  <div class="range"><label>Saturation <output id="satOut">100%</output></label><input id="saturation" type="range" min="0" max="200" value="100"></div>
- </div>
- <div class="actions"><button class="secondary" data-back="audio">Back</button><button class="primary" id="nextExport">Next →</button></div>
-</section>
-
-<section class="screen" id="export">
- <div class="pagehead"><button class="back" data-back="effects">‹</button><div><h2>Export your video</h2><p>Choose the quality for your final creation</p></div></div>
- <div class="progress" data-step="8"></div>
- <div class="previewbox"><div class="stage" id="exportStage"><div class="empty">Final video preview</div></div></div>
- <div class="card glass"><b>Resolution</b><div class="ratios" id="resolutions">
-  <button class="choice" data-res="480"><b>480p</b></button><button class="choice" data-res="720"><b>720p</b></button><button class="choice active" data-res="1080"><b>1080p</b></button><button class="choice" data-res="1440"><b>2K</b></button><button class="choice" data-res="2160"><b>4K</b></button>
- </div></div>
- <div class="card glass"><b>Frame rate</b><div class="row" id="fps" style="margin-top:12px">
-  <button class="chip" data-fps="24">24</button><button class="chip" data-fps="25">25</button><button class="chip active" data-fps="30">30</button><button class="chip" data-fps="50">50</button><button class="chip" data-fps="60">60</button>
- </div></div>
- <div class="card glass"><b>Bitrate</b><div class="row" id="bitrates" style="
+  <script type="module" src="scripts/app.js"></script>
+</body>
+    </html>
