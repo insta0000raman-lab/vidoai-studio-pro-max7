@@ -1,73 +1,85 @@
-
 (() => {
   "use strict";
 
   const Timeline = {
     project: null,
     container: null,
-    scale: 80,
     pixelsPerSecond: 80,
-    rowHeight: 58,
-    rulerHeight: 34,
     isDragging: false,
     dragData: null,
     unsubscribe: null,
+    root: null,
 
     init(options = {}) {
-      this.project = options.project || window.VYORAProject;
-
-      if (!this.project) {
-        console.error("VYORA project manager not found.");
-        return false;
+      if (
+        options instanceof HTMLElement ||
+        typeof options === "string"
+      ) {
+        options = { container: options };
       }
+
+      this.project = options.project || window.VYORAProject;
 
       this.container =
         typeof options.container === "string"
           ? document.querySelector(options.container)
           : options.container || null;
 
+      if (!this.project) {
+        console.error("VYORA project manager not found.");
+        return false;
+      }
+
+      if (!this.container) {
+        console.error("Timeline container missing.");
+        return false;
+      }
+
+      this.injectStyles();
       this.bindProject();
       this.render();
 
-      return true;
-    },
-
-    bindProject() {
-      if (this.unsubscribe) {
-        this.unsubscribe();
-      }
-
-      this.unsubscribe = this.project.subscribe(() => {
-        if (!this.isDragging) {
-          this.render();
-        }
-      });
-    },
-
-    setContainer(container) {
-      this.container =
-        typeof container === "string"
-          ? document.querySelector(container)
-          : container;
-
-      this.render();
+      return {
+        render: () => this.render(),
+        setZoom: value => this.setZoom(value),
+        fit: () => this.fit(),
+        destroy: () => this.destroy()
+      };
     },
 
     getState() {
-      return this.project?.getState() || null;
+      if (typeof this.project.getSnapshot === "function") {
+        return this.project.getSnapshot();
+      }
+
+      return this.project.data || this.project.state || null;
     },
 
-    getDuration() {
-      const duration = this.project?.duration || 0;
-      return Math.max(10, duration + 3);
+    getDuration(state) {
+      const projectDuration = Number(state?.duration) || 0;
+      let clipEnd = 0;
+
+      (state?.tracks || []).forEach(track => {
+        (track.clips || []).forEach(clip => {
+          clipEnd = Math.max(
+            clipEnd,
+            (Number(clip.start) || 0) +
+            (Number(clip.duration) || 0)
+          );
+        });
+      });
+
+      return Math.max(10, projectDuration, clipEnd + 3);
     },
 
     timeToPixels(time) {
-      return Math.max(0, Number(time) || 0) * this.pixelsPerSecond;
+      return Math.max(0, Number(time) || 0) *
+        this.pixelsPerSecond;
     },
 
     pixelsToTime(pixels) {
-      return Math.max(0, Number(pixels) || 0) / this.pixelsPerSecond;
+      return Math.max(0, Number(pixels) || 0) /
+        this.pixelsPerSecond;
     },
 
     escapeHTML(value) {
@@ -81,97 +93,6 @@
           "'": "&#39;"
         })[char]
       );
-    },
-
-    getTrackIcon(type) {
-      const icons = {
-        video: "film",
-        audio: "music-2",
-        text: "type",
-        overlay: "layers"
-      };
-
-      return icons[type] || "layers";
-    },
-
-    getClipColor(type) {
-      const colors = {
-        video: "video",
-        audio: "audio",
-        text: "text",
-        overlay: "overlay"
-      };
-
-      return colors[type] || "video";
-    },
-
-    render() {
-      if (!this.container || !this.project) return;
-
-      const state = this.getState();
-      if (!state) return;
-
-      const tracks = state.tracks || [];
-      const duration = this.getDuration();
-      const totalWidth = Math.max(
-        600,
-        this.timeToPixels(duration)
-      );
-
-      this.container.innerHTML = `
-        <div class="vyora-timeline" data-vyora-timeline>
-          <div class="vyora-timeline-toolbar">
-            <div class="vyora-timeline-heading">
-              <span class="vyora-timeline-dot"></span>
-              <strong>Timeline</strong>
-              <span class="vyora-timeline-time">
-                ${this.escapeHTML(this.project.formatTime?.(state.playhead) || this.formatTime(state.playhead))}
-              </span>
-            </div>
-
-            <div class="vyora-timeline-controls">
-              <button type="button" data-action="zoom-out" title="Zoom out">−</button>
-              <span>${Math.round(this.pixelsPerSecond)} px/s</span>
-              <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-              <button type="button" data-action="fit" title="Fit timeline">Fit</button>
-            </div>
-          </div>
-
-          <div class="vyora-timeline-scroll">
-            <div class="vyora-timeline-content" style="width:${totalWidth + 150}px">
-              <div class="vyora-ruler">
-                <div class="vyora-track-label ruler-label">TRACKS</div>
-                <div class="vyora-ruler-area" style="width:${totalWidth}px">
-                  ${this.renderRuler(duration)}
-                </div>
-              </div>
-
-              <div class="vyora-track-list">
-                ${tracks.length
-                  ? tracks.map(track => this.renderTrack(track, state)).join("")
-                  : `<div class="vyora-empty-track">No tracks available</div>`
-                }
-              </div>
-
-              <div class="vyora-playhead" style="left:${150 + this.timeToPixels(state.playhead)}px">
-                <div class="vyora-playhead-handle"></div>
-                <div class="vyora-playhead-line"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="vyora-timeline-footer">
-            <button type="button" data-action="add-video-track">+ Video</button>
-            <button type="button" data-action="add-audio-track">+ Audio</button>
-            <button type="button" data-action="add-text-track">+ Text</button>
-            <button type="button" data-action="split" ${state.selectedClipId ? "" : "disabled"}>Split clip</button>
-            <button type="button" data-action="delete" ${state.selectedClipId ? "" : "disabled"}>Delete</button>
-          </div>
-        </div>
-      `;
-
-      this.injectStyles();
-      this.bindEvents();
     },
 
     formatTime(seconds) {
@@ -189,20 +110,130 @@
       );
     },
 
+    bindProject() {
+      if (this.unsubscribe) {
+        this.unsubscribe();
+        this.unsubscribe = null;
+      }
+
+      if (typeof this.project.subscribe === "function") {
+        this.unsubscribe = this.project.subscribe(() => {
+          if (!this.isDragging) {
+            this.render();
+          }
+        });
+      }
+    },
+
+    render() {
+      if (!this.container || !this.project) return;
+
+      const state = this.getState();
+      if (!state) return;
+
+      const tracks = state.tracks || [];
+      const duration = this.getDuration(state);
+      const totalWidth = Math.max(
+        600,
+        this.timeToPixels(duration)
+      );
+
+      this.container.innerHTML = `
+        <div class="vyora-timeline" data-vyora-timeline>
+
+          <div class="vyora-timeline-toolbar">
+            <div class="vyora-timeline-heading">
+              <span class="vyora-timeline-dot"></span>
+              <strong>Timeline</strong>
+              <span class="vyora-timeline-time">
+                ${this.formatTime(state.playhead)}
+              </span>
+            </div>
+
+            <div class="vyora-timeline-controls">
+              <button data-action="zoom-out">−</button>
+              <span>${Math.round(this.pixelsPerSecond)} px/s</span>
+              <button data-action="zoom-in">+</button>
+              <button data-action="fit">Fit</button>
+            </div>
+          </div>
+
+          <div class="vyora-timeline-scroll">
+            <div class="vyora-timeline-content"
+                 style="width:${totalWidth + 150}px">
+
+              <div class="vyora-ruler">
+                <div class="vyora-track-label ruler-label">
+                  TRACKS
+                </div>
+
+                <div class="vyora-ruler-area"
+                     style="width:${totalWidth}px">
+                  ${this.renderRuler(duration)}
+                </div>
+              </div>
+
+              <div class="vyora-track-list">
+                ${
+                  tracks.length
+                    ? tracks.map(track =>
+                        this.renderTrack(track, state)
+                      ).join("")
+                    : `<div class="vyora-empty-track">
+                         No tracks available
+                       </div>`
+                }
+              </div>
+
+              <div class="vyora-playhead"
+                   style="left:${150 + this.timeToPixels(state.playhead)}px">
+                <div class="vyora-playhead-handle"></div>
+                <div class="vyora-playhead-line"></div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="vyora-timeline-footer">
+            <button data-action="add-video-track">+ Video</button>
+            <button data-action="add-audio-track">+ Audio</button>
+            <button data-action="add-text-track">+ Text</button>
+            <button data-action="split"
+              ${state.selectedClipId ? "" : "disabled"}>
+              Split
+            </button>
+            <button data-action="delete"
+              ${state.selectedClipId ? "" : "disabled"}>
+              Delete
+            </button>
+          </div>
+
+        </div>
+      `;
+
+      this.root = this.container.querySelector(
+        "[data-vyora-timeline]"
+      );
+
+      this.bindEvents();
+      this.refreshIcons();
+    },
+
     renderRuler(duration) {
-      const interval = this.pixelsPerSecond >= 100
-        ? 1
-        : this.pixelsPerSecond >= 45
-          ? 2
-          : 5;
+      const interval =
+        this.pixelsPerSecond >= 100 ? 1 :
+        this.pixelsPerSecond >= 45 ? 2 : 5;
 
       let output = "";
 
-      for (let time = 0; time <= duration; time += interval) {
-        const left = this.timeToPixels(time);
-
+      for (
+        let time = 0;
+        time <= duration;
+        time += interval
+      ) {
         output += `
-          <div class="vyora-ruler-tick" style="left:${left}px">
+          <div class="vyora-ruler-tick"
+               style="left:${this.timeToPixels(time)}px">
             <span>${this.formatTime(time).slice(0, 5)}</span>
           </div>
         `;
@@ -212,38 +243,46 @@
     },
 
     renderTrack(track, state) {
-      const selectedTrack =
-        state.selectedTrackId === track.id;
+      const icons = {
+        video: "film",
+        audio: "music-2",
+        text: "type",
+        overlay: "layers"
+      };
 
       const clips = (track.clips || [])
         .map(clip => this.renderClip(clip, track, state))
         .join("");
 
       return `
-        <div class="vyora-track-row ${selectedTrack ? "is-selected" : ""}"
-             data-track-id="${this.escapeHTML(track.id)}">
+        <div class="vyora-track-row">
 
           <div class="vyora-track-label">
             <div class="vyora-track-info">
               <span class="vyora-track-icon">
-                <i data-lucide="${this.getTrackIcon(track.type)}"></i>
+                <i data-lucide="${icons[track.type] || "layers"}"></i>
               </span>
+
               <span class="vyora-track-name">
                 ${this.escapeHTML(track.name)}
               </span>
             </div>
 
             <div class="vyora-track-actions">
-              <button type="button" data-track-action="mute"
+              <button data-track-action="mute"
                       data-track-id="${this.escapeHTML(track.id)}"
-                      title="Mute track">
-                <i data-lucide="${track.muted ? "volume-x" : "volume-2"}"></i>
+                      title="Mute">
+                <i data-lucide="${
+                  track.muted ? "volume-x" : "volume-2"
+                }"></i>
               </button>
 
-              <button type="button" data-track-action="lock"
+              <button data-track-action="lock"
                       data-track-id="${this.escapeHTML(track.id)}"
-                      title="Lock track">
-                <i data-lucide="${track.locked ? "lock" : "unlock"}"></i>
+                      title="Lock">
+                <i data-lucide="${
+                  track.locked ? "lock" : "unlock"
+                }"></i>
               </button>
             </div>
           </div>
@@ -252,6 +291,7 @@
                data-lane-track="${this.escapeHTML(track.id)}">
             ${clips}
           </div>
+
         </div>
       `;
     },
@@ -263,13 +303,16 @@
         this.timeToPixels(clip.duration)
       );
 
-      const selected =
-        state.selectedClipId === clip.id;
+      const selected = state.selectedClipId === clip.id;
 
-      const color = this.getClipColor(clip.type);
+      const type = ["video", "audio", "text", "overlay"]
+        .includes(clip.type)
+          ? clip.type
+          : track.type;
 
       return `
-        <div class="vyora-clip vyora-clip-${color} ${selected ? "is-selected" : ""}"
+        <div class="vyora-clip vyora-clip-${type}
+                    ${selected ? "is-selected" : ""}"
              data-clip-id="${this.escapeHTML(clip.id)}"
              data-track-id="${this.escapeHTML(track.id)}"
              style="left:${left}px;width:${width}px"
@@ -280,8 +323,9 @@
 
           <div class="vyora-clip-content">
             <span class="vyora-clip-title">
-              ${this.escapeHTML(clip.name)}
+              ${this.escapeHTML(clip.name || "Untitled")}
             </span>
+
             <span class="vyora-clip-duration">
               ${this.formatTime(clip.duration)}
             </span>
@@ -289,15 +333,13 @@
 
           <div class="vyora-clip-handle right"
                data-trim="right"></div>
+
         </div>
       `;
     },
 
     bindEvents() {
-      const root = this.container.querySelector(
-        "[data-vyora-timeline]"
-      );
-
+      const root = this.root;
       if (!root) return;
 
       root.addEventListener("click", event => {
@@ -306,8 +348,6 @@
         );
 
         if (trackButton) {
-          event.stopPropagation();
-
           const trackId = trackButton.dataset.trackId;
           const track = this.project.getTrack(trackId);
 
@@ -328,20 +368,28 @@
           return;
         }
 
-        const actionButton = event.target.closest("[data-action]");
+        const actionButton = event.target.closest(
+          "[data-action]"
+        );
 
         if (actionButton) {
           this.handleAction(actionButton.dataset.action);
           return;
         }
 
-        const clipElement = event.target.closest("[data-clip-id]");
+        const clip = event.target.closest("[data-clip-id]");
 
-        if (clipElement) {
-          this.project.selectClip(clipElement.dataset.clipId);
-          this.emit("clip-selected", {
-            clipId: clipElement.dataset.clipId
-          });
+        if (clip) {
+          if (this.dragData?.moved) return;
+
+          this.project.selectClip(clip.dataset.clipId);
+
+          window.dispatchEvent(
+            new CustomEvent("vyora:timeline-clip-selected", {
+              detail: { clipId: clip.dataset.clipId }
+            })
+          );
+
           return;
         }
 
@@ -349,17 +397,19 @@
 
         if (lane) {
           const rect = lane.getBoundingClientRect();
-          const x = event.clientX - rect.left;
-          this.seek(this.pixelsToTime(x));
+          this.seek(
+            this.pixelsToTime(event.clientX - rect.left)
+          );
         }
       });
 
       root.addEventListener("pointerdown", event => {
         const clip = event.target.closest("[data-clip-id]");
 
-        if (!clip || event.target.closest("[data-trim]")) {
-          return;
-        }
+        if (
+          !clip ||
+          event.target.closest("[data-trim]")
+        ) return;
 
         if (event.button !== 0) return;
 
@@ -376,12 +426,8 @@
           clipId,
           originalStart: found.clip.start,
           pointerX: event.clientX,
-          originalTrackId: found.trackId,
-          targetTrackId: found.trackId,
           moved: false
         };
-
-        this.isDragging = false;
 
         try {
           clip.setPointerCapture(event.pointerId);
@@ -395,8 +441,8 @@
           event.clientX - this.dragData.pointerX;
 
         if (Math.abs(difference) > 4) {
-          this.isDragging = true;
           this.dragData.moved = true;
+          this.isDragging = true;
         }
 
         if (!this.isDragging) return;
@@ -404,7 +450,7 @@
         const newStart = Math.max(
           0,
           this.dragData.originalStart +
-            this.pixelsToTime(difference)
+          this.pixelsToTime(difference)
         );
 
         const clip = root.querySelector(
@@ -417,30 +463,32 @@
         }
       });
 
-      root.addEventListener("pointerup", event => {
+      const finishDrag = event => {
         if (!this.dragData) return;
 
         const data = this.dragData;
+        const difference =
+          event.clientX - data.pointerX;
+
         this.dragData = null;
+        this.isDragging = false;
 
         if (data.moved) {
-          const difference =
-            event.clientX - data.pointerX;
-
           const newStart = Math.max(
             0,
             data.originalStart +
-              this.pixelsToTime(difference)
+            this.pixelsToTime(difference)
           );
 
           this.project.updateClip(data.clipId, {
             start: newStart
           });
+        } else {
+          this.render();
         }
+      };
 
-        this.isDragging = false;
-        this.render();
-      });
+      root.addEventListener("pointerup", finishDrag);
 
       root.addEventListener("pointercancel", () => {
         this.dragData = null;
@@ -450,6 +498,8 @@
     },
 
     handleAction(action) {
+      const state = this.getState();
+
       switch (action) {
         case "zoom-in":
           this.setZoom(this.pixelsPerSecond * 1.25);
@@ -464,25 +514,42 @@
           break;
 
         case "add-video-track":
-          this.project.addTrack("video", "Video " + (this.project.tracks.filter(t => t.type === "video").length + 1));
+          this.addTrack("video");
           break;
 
         case "add-audio-track":
-          this.project.addTrack("audio", "Audio " + (this.project.tracks.filter(t => t.type === "audio").length + 1));
+          this.addTrack("audio");
           break;
 
         case "add-text-track":
-          this.project.addTrack("text", "Text " + (this.project.tracks.filter(t => t.type === "text").length + 1));
+          this.addTrack("text");
           break;
 
         case "split":
-          this.splitSelected();
+          this.splitSelected(state);
           break;
 
         case "delete":
-          this.deleteSelected();
+          this.deleteSelected(state);
           break;
       }
+    },
+
+    addTrack(type) {
+      const state = this.getState();
+      const count = (state.tracks || [])
+        .filter(track => track.type === type).length + 1;
+
+      const names = {
+        video: "Video",
+        audio: "Audio",
+        text: "Text"
+      };
+
+      this.project.addTrack(
+        type,
+        (names[type] || "Track") + " " + count
+      );
     },
 
     setZoom(value) {
@@ -495,9 +562,7 @@
     },
 
     fit() {
-      if (!this.container) return;
-
-      const scroll = this.container.querySelector(
+      const scroll = this.container?.querySelector(
         ".vyora-timeline-scroll"
       );
 
@@ -505,23 +570,13 @@
         ? scroll.clientWidth - 180
         : 600;
 
-      const duration = this.getDuration();
+      const duration = this.getDuration(this.getState());
 
-      this.pixelsPerSecond = Math.max(
-        20,
-        Math.min(300, available / duration)
-      );
-
-      this.render();
+      this.setZoom(available / duration);
     },
 
     seek(time) {
       this.project.setPlayhead(time);
-
-      this.emit("seek", {
-        time,
-        formatted: this.formatTime(time)
-      });
 
       window.dispatchEvent(
         new CustomEvent("vyora:timeline-seek", {
@@ -530,10 +585,8 @@
       );
     },
 
-    splitSelected() {
-      const state = this.getState();
-
-      if (!state.selectedClipId) return false;
+    splitSelected(state) {
+      if (!state?.selectedClipId) return false;
 
       const result = this.project.splitClip(
         state.selectedClipId,
@@ -541,41 +594,30 @@
       );
 
       if (!result) {
-        this.emit("split-failed", {
-          message: "Playhead ko clip ke beech mein rakho."
-        });
+        window.dispatchEvent(
+          new CustomEvent("vyora:timeline-split-failed", {
+            detail: {
+              message: "Playhead ko clip ke beech mein rakho."
+            }
+          })
+        );
 
         return false;
       }
 
-      this.emit("clip-split", result);
       return true;
     },
 
-    deleteSelected() {
-      const state = this.getState();
+    deleteSelected(state) {
+      if (!state?.selectedClipId) return false;
 
-      if (!state.selectedClipId) return false;
-
-      const success = this.project.removeClip(
-        state.selectedClipId
-      );
-
-      if (success) {
-        this.emit("clip-deleted", {
-          clipId: state.selectedClipId
-        });
-      }
-
-      return success;
+      return this.project.removeClip(state.selectedClipId);
     },
 
-    emit(name, detail = {}) {
-      window.dispatchEvent(
-        new CustomEvent("vyora:timeline-" + name, {
-          detail
-        })
-      );
+    refreshIcons() {
+      if (window.lucide?.createIcons) {
+        window.lucide.createIcons();
+      }
     },
 
     injectStyles() {
@@ -723,10 +765,6 @@
           position: relative;
         }
 
-        .vyora-track-row.is-selected .vyora-track-label {
-          background: #211d32;
-        }
-
         .vyora-track-info {
           gap: 7px;
           overflow: hidden;
@@ -780,7 +818,7 @@
             #282a34 1px,
             transparent 1px
           );
-          background-size: 40px 100%;
+                    background-size: 40px 100%;
           border-bottom: 1px solid #30313b;
         }
 
@@ -791,219 +829,176 @@
           min-width: 24px;
           border-radius: 6px;
           overflow: hidden;
-          cursor: grab;        }
-
-        .vyora-clip:hover {
-          filter: brightness(1.15);
+          cursor: grab;
+          box-sizing: border-box;
         }
 
-        .vyora-clip.selected {
-          outline: 2px solid #ffffff;
+        .vyora-clip:active {
+          cursor: grabbing;
+        }
+
+        .vyora-clip-video {
+          background: #5140a2;
+          border: 1px solid #806de5;
+        }
+
+        .vyora-clip-audio {
+          background: #176c68;
+          border: 1px solid #36aaa0;
+        }
+
+        .vyora-clip-text {
+          background: #875322;
+          border: 1px solid #d69b54;
+        }
+
+        .vyora-clip-overlay {
+          background: #743c78;
+          border: 1px solid #b56cbb;
+        }
+
+        .vyora-clip.is-selected {
+          outline: 2px solid #fff;
           outline-offset: -2px;
         }
 
-        .vyora-clip-label {
-          padding: 5px 7px;
-          font-size: 11px;
-          color: #fff;
-          white-space: nowrap;
+        .vyora-clip-content {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 2px;
+          padding: 0 8px;
+          overflow: hidden;
+          pointer-events: none;
+        }
+
+        .vyora-clip-title {
+          font-size: 10px;
+          font-weight: 600;
           overflow: hidden;
           text-overflow: ellipsis;
-          pointer-events: none;
+          white-space: nowrap;
+        }
+
+        .vyora-clip-duration {
+          font-size: 9px;
+          opacity: .75;
+        }
+
+        .vyora-clip-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 5px;
+          background: rgba(255,255,255,.35);
+          z-index: 2;
+        }
+
+        .vyora-clip-handle.left {
+          left: 0;
+        }
+
+        .vyora-clip-handle.right {
+          right: 0;
         }
 
         .vyora-playhead {
           position: absolute;
           top: 0;
           bottom: 0;
-          width: 2px;
-          background: #ff4d83;
-          z-index: 10;
+          width: 1px;
+          z-index: 5;
           pointer-events: none;
         }
 
-        .vyora-playhead::before {
-          content: "";
+        .vyora-playhead-line {
           position: absolute;
-          top: 0;
-          left: -4px;
-          width: 10px;
-          height: 10px;
-          background: #ff4d83;
-          border-radius: 50%;
+          top: 28px;
+          bottom: 0;
+          left: 0;
+          width: 2px;
+          background: #ff526d;
         }
 
-        .vyora-timeline-empty {
+        .vyora-playhead-handle {
+          position: absolute;
+          top: 25px;
+          left: -5px;
+          width: 11px;
+          height: 11px;
+          border-radius: 3px;
+          background: #ff526d;
+        }
+
+        .vyora-empty-track {
           padding: 25px;
           text-align: center;
-          color: #858595;
-          font-size: 13px;
+          color: #777;
+          font-size: 12px;
         }
-      `;
-      document.head.appendChild(style);
-    }
 
-    function render() {
-      if (!container) return;
+        .vyora-timeline-footer {
+          gap: 7px;
+          flex-wrap: wrap;
+          padding: 11px;
+          border-top: 1px solid #292b35;
+        }
 
-      const state = project.state;
-      const clips = state.clips || [];
-      const tracks = state.tracks || [];
-      const duration = Math.max(10, state.duration || 30);
-      const pixelsPerSecond = zoom * 10;
-
-      container.innerHTML = `
-        <div class="vyora-timeline">
-          <div class="vyora-timeline-toolbar">
-            <button data-action="add-track">+ Track</button>
-            <button data-action="split">Split</button>
-            <button data-action="delete">Delete</button>
-            <button data-action="zoom-out">−</button>
-            <button data-action="zoom-in">+</button>
-            <button data-action="fit">Fit</button>
-          </div>
-
-          <div class="vyora-timeline-scroll">
-            <div class="vyora-timeline-content"
-                 style="width:${Math.max(600, duration * pixelsPerSecond + 100)}px">
-
-              <div class="vyora-ruler">
-                ${Array.from({ length: Math.ceil(duration) + 1 }, (_, i) =>
-                  `<span style="left:${i * pixelsPerSecond}px">${i}s</span>`
-                ).join("")}
-              </div>
-
-              ${tracks.map(track => `
-                <div class="vyora-track">
-                  <div class="vyora-track-header">
-                    <span>${escapeHTML(track.name || "Track")}</span>
-                    <button data-action="mute-track"
-                            data-id="${track.id}">M</button>
-                    <button data-action="lock-track"
-                            data-id="${track.id}">L</button>
-                  </div>
-
-                  <div class="vyora-track-lane"
-                       data-track="${track.id}">
-                    ${clips.filter(c => c.trackId === track.id).map(clip => `
-                      <div class="vyora-clip ${selectedClipId === clip.id ? "selected" : ""}"
-                           data-clip="${clip.id}"
-                           style="left:${clip.start * pixelsPerSecond}px;
-                                  width:${Math.max(24, clip.duration * pixelsPerSecond)}px">
-                        <div class="vyora-clip-label">
-                          ${escapeHTML(clip.name || clip.type || "Clip")}
-                        </div>
-                      </div>
-                    `).join("")}
-                  </div>
-                </div>
-              `).join("")}
-
-              <div class="vyora-playhead"
-                   style="left:${(state.playhead || 0) * pixelsPerSecond}px">
-              </div>
-
-              ${clips.length === 0 ? `
-                <div class="vyora-timeline-empty">
-                  Import media to start editing
-                </div>
-              ` : ""}
-            </div>
-          </div>
-        </div>
-      `;
-
-      bindEvents();
-    }
-
-    function escapeHTML(value) {
-      return String(value).replace(/[&<>"']/g, char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      })[char]);
-    }
-
-    function bindEvents() {
-      container.querySelectorAll("[data-action]").forEach(button => {
-        button.addEventListener("click", () => {
-          const action = button.dataset.action;
-
-          if (action === "add-track") {
-            project.addTrack();
-          } else if (action === "split") {
-            if (selectedClipId) {
-              project.splitClip(selectedClipId, project.state.playhead || 0);
-            }
-          } else if (action === "delete") {
-            if (selectedClipId) {
-              project.removeClip(selectedClipId);
-              selectedClipId = null;
-            }
-          } else if (action === "zoom-in") {
-            zoom = Math.min(20, zoom + 2);
-            render();
-          } else if (action === "zoom-out") {
-            zoom = Math.max(2, zoom - 2);
-            render();
-          } else if (action === "fit") {
-            zoom = 5;
-            render();
-          } else if (action === "mute-track") {
-            project.updateTrack(button.dataset.id, { muted: true });
-          } else if (action === "lock-track") {
-            project.updateTrack(button.dataset.id, { locked: true });
+        @media (max-width: 600px) {
+          .vyora-timeline-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
           }
-        });
-      });
 
-      container.querySelectorAll(".vyora-clip").forEach(clipElement => {
-        clipElement.addEventListener("click", event => {
-          event.stopPropagation();
-          selectedClipId = clipElement.dataset.clip;
-          project.selectClip(selectedClipId);
-          render();
-        });
-      });
-
-      container.querySelectorAll(".vyora-track-lane").forEach(lane => {
-        lane.addEventListener("click", event => {
-          if (event.target.closest(".vyora-clip")) return;
-
-          const rect = lane.getBoundingClientRect();
-          const seconds = Math.max(0, (event.clientX - rect.left) / (zoom * 10));
-
-          project.setPlayhead(seconds);
-          window.dispatchEvent(new CustomEvent("vyora:timeline-seek", {
-            detail: { time: seconds }
-          }));
-        });
-      });
-    }
-
-    function init(element) {
-      container = element;
-      if (!container) throw new Error("Timeline container missing");
-
-      addStyles();
-      render();
-
-      if (project.subscribe) {
-        unsubscribe = project.subscribe(render);
-      }
-
-      return {
-        render,
-        destroy() {
-          if (unsubscribe) unsubscribe();
-          container.innerHTML = "";
+          .vyora-timeline-footer button {
+            font-size: 10px;
+            padding: 6px 7px;
+          }
         }
-      };
+      `;
+
+      document.head.appendChild(style);
+    },
+
+    destroy() {
+      if (unsubscribe) unsubscribe();
+      if (container) container.innerHTML = "";
+    }
+  };
+
+  function render() {
+    Timeline.render();
+  }
+
+  function addStyles() {
+    Timeline.injectStyles();
+  }
+
+  function init(element) {
+    Timeline.container = element;
+    Timeline.project = window.VYORAProject;
+
+    if (!Timeline.container) {
+      throw new Error("Timeline container missing");
     }
 
-    window.VYORATimeline = { init };
+    addStyles();
+    Timeline.bindProject();
+    render();
 
-  })();
-   
+    return {
+      render,
+      destroy() {
+        Timeline.destroy();
+      }
+    };
+  }
+
+  window.VYORATimeline = {
+    init,
+    render,
+    destroy: () => Timeline.destroy()
+  };
+
+})();
