@@ -5,921 +5,579 @@
   const Tools = {
     project: null,
     media: null,
+    container: null,
     activePanel: "crop",
     selectedClipId: null,
     selectedTextId: null,
-    container: null,
-    listeners: new Set(),
 
     init(options = {}) {
       this.project = options.project || window.VYORAProject;
       this.media = options.media || window.VYORAMedia;
+
       this.container =
         typeof options.container === "string"
           ? document.querySelector(options.container)
           : options.container || null;
 
-      if (!this.project) {
-        console.error("VYORA project system not found.");
+      if (!this.project || !this.container) {
+        console.error("VYORA Tools: Project or container missing.");
         return false;
       }
 
       this.render();
-      return true;
+      return this;
     },
 
-    subscribe(callback) {
-      if (typeof callback !== "function") return () => {};
-
-      this.listeners.add(callback);
-
-      return () => this.listeners.delete(callback);
+    get state() {
+      return this.project?.state || {};
     },
 
-    emit(action, detail = {}) {
-      const eventData = { action, ...detail };
+    get clips() {
+      return this.state.clips || [];
+    },
 
-      this.listeners.forEach(callback => {
-        try {
-          callback(eventData);
-        } catch (error) {
-          console.error("VYORA tools listener:", error);
-        }
+    get selectedClip() {
+      return this.clips.find(
+        clip => clip.id === this.selectedClipId
+      ) || this.clips[0] || null;
+    },
+
+    updateProject(label, callback) {
+      if (typeof this.project.update === "function") {
+        return this.project.update(label, callback);
+      }
+
+      return callback();
+    },
+
+    updateClip(label, changes) {
+      const clip = this.selectedClip;
+      if (!clip) {
+        this.toast("Pehle timeline mein clip select karo.");
+        return;
+      }
+
+      this.updateProject(label, () => {
+        Object.assign(clip, changes);
       });
 
-      window.dispatchEvent(
-        new CustomEvent("vyora:tool-action", {
-          detail: eventData
-        })
-      );
-    },
-
-    getState() {
-      return this.project?.getState() || null;
-    },
-
-    getSelectedClip() {
-      const state = this.getState();
-      const id = this.selectedClipId || state?.selectedClipId;
-
-      return id ? this.project.findClip(id) : null;
-    },
-
-    selectClip(clipId) {
-      const found = this.project.findClip(clipId);
-      if (!found) return false;
-
-      this.selectedClipId = clipId;
-      this.selectedTextId = null;
-      this.project.selectClip(clipId);
       this.render();
+    },
 
-      return true;
+    toast(message) {
+      if (typeof window.VYORA?.toast === "function") {
+        window.VYORA.toast(message);
+      } else {
+        console.log(message);
+      }
     },
 
     setPanel(panel) {
       const allowed = [
-        "crop",
-        "trim",
-        "text",
-        "audio",
-        "effects",
-        "transform"
+        "crop", "trim", "text", "audio",
+        "effects", "transform"
       ];
 
-      if (!allowed.includes(panel)) return false;
+      if (!allowed.includes(panel)) return;
 
       this.activePanel = panel;
       this.render();
+    },
 
-      this.emit("panel-change", { panel });
+    addText() {
+      if (!this.project?.addTextLayer) {
+        this.toast("Text system available nahi hai.");
+        return;
+      }
 
-      return true;
+      const layer = this.project.addTextLayer({
+        text: "Your Text",
+        start: this.state.playhead || 0,
+        duration: 5,
+        style: "clean",
+        x: 50,
+        y: 50,
+        fontSize: 48,
+        color: "#ffffff"
+      });
+
+      if (layer?.id) {
+        this.selectedTextId = layer.id;
+      }
+
+      this.setPanel("text");
+    },
+
+    getSelectedText() {
+      const layers = this.state.textLayers || this.state.texts || [];
+
+      return layers.find(
+        item => item.id === this.selectedTextId
+      ) || layers[0] || null;
     },
 
     render() {
       if (!this.container) return;
 
+      const tabs = [
+        ["crop", "Crop"],
+        ["trim", "Trim"],
+        ["text", "Text"],
+        ["audio", "Audio"],
+        ["effects", "Effects"],
+        ["transform", "Adjust"]
+      ];
+
       this.container.innerHTML = `
         <div class="vyora-tools">
+
           <div class="vyora-tools-tabs">
-            ${this.renderTab("crop", "Crop")}
-            ${this.renderTab("trim", "Trim")}
-            ${this.renderTab("text", "Text")}
-            ${this.renderTab("audio", "Audio")}
-            ${this.renderTab("effects", "Effects")}
-            ${this.renderTab("transform", "Transform")}
+            ${tabs.map(([id, title]) => `
+              <button
+                type="button"
+                class="vyora-tool-tab ${this.activePanel === id ? "active" : ""}"
+                data-panel="${id}">
+                ${title}
+              </button>
+            `).join("")}
           </div>
 
           <div class="vyora-tools-content">
             ${this.renderPanel()}
           </div>
+
         </div>
       `;
 
-      this.injectStyles();
       this.bindEvents();
+    },
 
-      if (window.lucide) {
-        window.lucide.createIcons();
+    renderPanel() {
+      const clip = this.selectedClip;
+
+      if (this.activePanel !== "text" && !clip) {
+        return `
+          <div class="vyora-tool-empty">
+            Timeline mein pehle video clip select karo.
+          </div>
+        `;
+      }
+
+      switch (this.activePanel) {
+        case "crop":
+          return this.renderCrop(clip);
+        case "trim":
+          return this.renderTrim(clip);
+        case "text":
+          return this.renderText();
+        case "audio":
+          return this.renderAudio(clip);
+        case "effects":
+          return this.renderEffects(clip);
+        case "transform":
+          return this.renderTransform(clip);
+        default:
+          return "";
       }
     },
 
-    renderTab(id, label) {
+    renderCrop(clip) {
+      const crop = clip?.crop || {};
+
       return `
-        <button type="button"
-          class="vyora-tool-tab ${this.activePanel === id ? "active" : ""}"
-          data-panel="${id}">
-          ${label}
+        <h3>Crop Video</h3>
+        <p class="vyora-tool-description">
+          Video ke edges adjust karo.
+        </p>
+
+        <div class="vyora-tool-buttons">
+          ${[0, 5, 10, 20].map(value => `
+            <button type="button"
+              data-crop-preset="${value}">
+              ${value}%
+            </button>
+          `).join("")}
+        </div>
+
+        ${this.rangeControl("Top", "crop-top", crop.top ?? 0, 0, 45)}
+        ${this.rangeControl("Bottom", "crop-bottom", crop.bottom ?? 0, 0, 45)}
+        ${this.rangeControl("Left", "crop-left", crop.left ?? 0, 0, 45)}
+        ${this.rangeControl("Right", "crop-right", crop.right ?? 0, 0, 45)}
+
+        <button type="button" class="vyora-tool-primary"
+          data-action="equal-crop">
+          Equal Top & Bottom
         </button>
       `;
     },
 
-    renderPanel() {
-      const panels = {
-        crop: () => this.renderCrop(),
-        trim: () => this.renderTrim(),
-        text: () => this.renderText(),
-        audio: () => this.renderAudio(),
-        effects: () => this.renderEffects(),
-        transform: () => this.renderTransform()
-      };
-
-      return panels[this.activePanel]?.() || "";
-    },
-
-    renderNoClip(message = "Select a clip to use this tool.") {
-      return `
-        <div class="vyora-tool-empty">
-          <span class="vyora-tool-empty-icon">✦</span>
-          <p>${this.escapeHTML(message)}</p>
-        </div>
-      `;
-    },
-
-    renderCrop() {
-      const found = this.getSelectedClip();
-      if (!found) return this.renderNoClip();
-
-      const crop = found.clip.crop || {};
+    renderTrim(clip) {
+      const start = Number(clip?.sourceStart || 0);
+      const duration = Number(clip?.duration || 1);
 
       return `
-        <div class="vyora-tool-section">
-          <h3>Crop & Frame</h3>
-          <p class="vyora-tool-description">
-            Adjust the visible area of your selected clip.
-          </p>
+        <h3>Trim Clip</h3>
+        <p class="vyora-tool-description">
+          Clip ka start aur duration set karo.
+        </p>
 
-          <div class="vyora-crop-presets">
-            <button data-crop-preset="0">Reset</button>
-            <button data-crop-preset="5">5%</button>
-            <button data-crop-preset="10">10%</button>
-            <button data-crop-preset="20">20%</button>
-          </div>
+        ${this.numberControl("Start Time", "trim-start", start, 0)}
+        ${this.numberControl("Duration", "trim-duration", duration, 0.1)}
 
-          ${this.renderSlider("Top", "crop-top", crop.top || 0, 0, 95)}
-          ${this.renderSlider("Bottom", "crop-bottom", crop.bottom || 0, 0, 95)}
-          ${this.renderSlider("Left", "crop-left", crop.left || 0, 0, 95)}
-          ${this.renderSlider("Right", "crop-right", crop.right || 0, 0, 95)}
-
-          <button class="vyora-tool-primary" data-action="crop-equal">
-            Equal top & bottom
-          </button>
-        </div>
-      `;
-    },
-
-    renderTrim() {
-      const found = this.getSelectedClip();
-      if (!found) return this.renderNoClip();
-
-      const clip = found.clip;
-
-      return `
-        <div class="vyora-tool-section">
-          <h3>Trim Clip</h3>
-          <p class="vyora-tool-description">
-            Set the start and end points of your clip.
-          </p>
-
-          <div class="vyora-tool-number">
-            <label>Timeline start (seconds)</label>
-            <input type="number" min="0" step="0.01"
-              data-value="clip-start" value="${clip.start}">
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Clip duration (seconds)</label>
-            <input type="number" min="0.01" step="0.01"
-              data-value="clip-duration" value="${clip.duration}">
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Source start (seconds)</label>
-            <input type="number" min="0" step="0.01"
-              data-value="source-start" value="${clip.sourceStart || 0}">
-          </div>
-
-          <button class="vyora-tool-primary" data-action="apply-trim">
-            Apply trim
-          </button>
-        </div>
+        <button type="button" class="vyora-tool-primary"
+          data-action="apply-trim">
+          Apply Trim
+        </button>
       `;
     },
 
     renderText() {
-      const state = this.getState();
-      const layers = state?.textLayers || [];
+      const text = this.getSelectedText();
 
       return `
-        <div class="vyora-tool-section">
-          <h3>Text Studio</h3>
-          <p class="vyora-tool-description">
-            Create and style text overlays.
-          </p>
+        <h3>Text Editor</h3>
 
-          <button class="vyora-tool-primary" data-action="add-text">
-            + Add text layer
-          </button>
-
-          <div class="vyora-text-list">
-            ${layers.length
-              ? layers.map(layer => `
-                <button class="vyora-text-item ${this.selectedTextId === layer.id ? "selected" : ""}"
-                  data-text-id="${this.escapeHTML(layer.id)}">
-                  <span>${this.escapeHTML(layer.text)}</span>
-                  <small>${this.escapeHTML(layer.style)}</small>
-                </button>
-              `).join("")
-              : `<p class="vyora-tool-muted">No text layers yet.</p>`
-            }
-          </div>
-
-          ${this.selectedTextId
-            ? this.renderTextProperties()
-            : ""
-          }
-        </div>
-      `;
-    },
-
-    renderTextProperties() {
-      const state = this.getState();
-      const layer = state.textLayers.find(
-        item => item.id === this.selectedTextId
-      );
-
-      if (!layer) return "";
-
-      return `
-        <div class="vyora-tool-divider"></div>
-        <h4>Edit selected text</h4>
-
-        <label class="vyora-tool-label">Text</label>
-        <textarea data-value="text-content">${this.escapeHTML(layer.text)}</textarea>
-
-        <label class="vyora-tool-label">Style</label>
-        <select data-value="text-style">
-          ${["clean", "bold", "neon", "cinematic", "outline"]
-            .map(style => `
-              <option value="${style}" ${layer.style === style ? "selected" : ""}>
-                ${style[0].toUpperCase() + style.slice(1)}
-              </option>
-            `).join("")}
-        </select>
-
-        <label class="vyora-tool-label">Font size</label>
-        <input type="range" min="12" max="220"
-          data-value="text-size" value="${layer.fontSize}">
-
-        <label class="vyora-tool-label">Text color</label>
-        <input type="color" data-value="text-color"
-          value="${this.isColor(layer.color) ? layer.color : "#ffffff"}">
-
-        ${this.renderSlider("Horizontal position", "text-x", layer.x, 0, 100)}
-        ${this.renderSlider("Vertical position", "text-y", layer.y, 0, 100)}
-        ${this.renderSlider("Opacity", "text-opacity", layer.opacity * 100, 0, 100)}
-
-        <button class="vyora-tool-danger" data-action="delete-text">
-          Delete text layer
+        <button type="button" class="vyora-tool-primary"
+          data-action="add-text">
+          + Add Text
         </button>
-      `;
-    },
 
-    renderAudio() {
-      const found = this.getSelectedClip();
+        ${text ? `
+          <label class="vyora-tool-label">Text</label>
+          <textarea data-field="text-value">${this.escape(text.text || "")}</textarea>
 
-      if (!found || found.clip.type !== "audio") {
-        return this.renderNoClip(
-          "Select an audio clip from the timeline."
-        );
-      }
-
-      const clip = found.clip;
-
-      return `
-        <div class="vyora-tool-section">
-          <h3>Audio Controls</h3>
-          <p class="vyora-tool-description">
-            Control the selected audio clip.
-          </p>
-
-          ${this.renderSlider("Volume", "audio-volume", clip.volume * 100, 0, 200)}
-
-          ${this.renderSlider("Playback speed", "audio-speed", clip.speed * 100, 25, 400)}
-
-          <label class="vyora-tool-checkbox">
-            <input type="checkbox" data-value="audio-muted"
-              ${clip.muted ? "checked" : ""}>
-            Mute this clip
-          </label>
-
-          <div class="vyora-tool-number">
-            <label>Fade in (seconds)</label>
-            <input type="number" min="0" max="${clip.duration / 2}"
-              step="0.1" data-value="audio-fade-in" value="0">
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Fade out (seconds)</label>
-            <input type="number" min="0" max="${clip.duration / 2}"
-              step="0.1" data-value="audio-fade-out" value="0">
-          </div>
-
-          <button class="vyora-tool-primary" data-action="apply-audio">
-            Apply audio settings
-          </button>
-        </div>
-      `;
-    },
-
-    renderEffects() {
-      const state = this.getState();
-      const effects = state?.effects || [];
-
-      const presets = [
-        ["brightness", "Brightness"],
-        ["contrast", "Contrast"],
-        ["saturation", "Saturation"],
-        ["sharpen", "Sharpen"],
-        ["blur", "Blur"],
-        ["vignette", "Vignette"],
-        ["warmth", "Warmth"],
-        ["grain", "Film grain"]
-      ];
-
-      return `
-        <div class="vyora-tool-section">
-          <h3>Effects Library</h3>
-          <p class="vyora-tool-description">
-            Add effects to your project.
-          </p>
-
-          <div class="vyora-effect-grid">
-            ${presets.map(([type, label]) => `
-              <button data-effect="${type}">
-                <span>✦</span>
-                ${label}
+          <label class="vyora-tool-label">Text Style</label>
+          <div class="vyora-tool-buttons">
+            ${["clean", "bold", "neon", "cinematic", "outline"].map(style => `
+              <button type="button" data-text-style="${style}">
+                ${style}
               </button>
             `).join("")}
           </div>
 
-          <div class="vyora-tool-divider"></div>
-          <h4>Applied effects</h4>
+          ${this.rangeControl("Font Size", "text-size", text.fontSize || 48, 12, 120)}
+          <label class="vyora-tool-label">Text Color</label>
+          <input type="color" data-field="text-color"
+            value="${this.escape(text.color || "#ffffff")}">
 
-          <div class="vyora-effect-list">
-            ${effects.length
-              ? effects.map(effect => `
-                <div class="vyora-effect-item">
-                  <div>
-                    <strong>${this.escapeHTML(effect.name)}</strong>
-                    <small>${effect.intensity}% intensity</small>
-                  </div>
-                  <button data-effect-toggle="${effect.id}">
-                    ${effect.enabled ? "On" : "Off"}
-                  </button>
-                  <button data-effect-delete="${effect.id}">×</button>
-                </div>
-              `).join("")
-              : `<p class="vyora-tool-muted">No effects applied.</p>`
-            }
-          </div>
-        </div>
-      `;
-    },
-
-    renderTransform() {
-      const state = this.getState();
-      const settings = state.settings;
-
-      return `
-        <div class="vyora-tool-section">
-          <h3>Project Transform</h3>
-          <p class="vyora-tool-description">
-            Change your project canvas settings.
-          </p>
-
-          <div class="vyora-tool-number">
-            <label>Width</label>
-            <input type="number" min="16" max="7680"
-              data-value="project-width" value="${settings.width}">
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Height</label>
-            <input type="number" min="16" max="7680"
-              data-value="project-height" value="${settings.height}">
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Frame rate</label>
-            <select data-value="project-fps">
-              ${[24, 25, 30, 48, 50, 60, 120]
-                .map(fps => `
-                  <option value="${fps}" ${settings.fps === fps ? "selected" : ""}>
-                    ${fps} FPS
-                  </option>
-                `).join("")}
-            </select>
-          </div>
-
-          <div class="vyora-tool-number">
-            <label>Background</label>
-            <input type="color" data-value="project-background"
-              value="${this.isColor(settings.background) ? settings.background : "#08090d"}">
-          </div>
-
-          <button class="vyora-tool-primary" data-action="apply-transform">
-            Apply project settings
+          <button type="button" class="vyora-tool-primary"
+            data-action="save-text">
+            Save Text
           </button>
+
+          <button type="button" class="vyora-tool-danger"
+            data-action="delete-text">
+            Delete Text
+          </button>
+        ` : `
+          <p class="vyora-tool-empty">
+            Add Text dabakar naya text banao.
+          </p>
+        `}
+      `;
+    },
+
+    renderAudio(clip) {
+      const volume = clip?.volume ?? 100;
+      const speed = clip?.speed ?? 1;
+
+      return `
+        <h3>Audio & Volume</h3>
+
+        ${this.rangeControl("Volume", "audio-volume", volume, 0, 200)}
+        ${this.rangeControl("Speed", "audio-speed", speed, 0.25, 2, 0.05)}
+
+        <label class="vyora-tool-label">
+          Fade In (seconds)
+        </label>
+        <input type="number" min="0" max="30"
+          data-field="fade-in"
+          value="${clip?.fadeIn || 0}">
+
+        <label class="vyora-tool-label">
+          Fade Out (seconds)
+        </label>
+        <input type="number" min="0" max="30"
+          data-field="fade-out"
+          value="${clip?.fadeOut || 0}">
+
+        <button type="button" class="vyora-tool-primary"
+          data-action="apply-audio">
+          Apply Audio Settings
+        </button>
+      `;
+    },
+
+    renderEffects(clip) {
+      const effects = clip?.effects || [];
+
+      return `
+        <h3>Video Effects</h3>
+
+        <div class="vyora-tool-buttons">
+          ${["brightness", "contrast", "saturation", "blur", "grayscale"].map(effect => `
+            <button type="button" data-effect="${effect}">
+              ${effect}
+            </button>
+          `).join("")}
+        </div>
+
+        <p class="vyora-tool-description">
+          Effect select karke slider adjust karo.
+        </p>
+
+        ${effects.map(effect => `
+          <div class="vyora-effect-row">
+            <span>${this.escape(effect.type)}</span>
+            <button type="button" data-remove-effect="${effect.id}">
+              Remove
+            </button>
+          </div>
+        `).join("")}
+
+        <div id="vyoraEffectControl"></div>
+      `;
+    },
+
+    renderTransform(clip) {
+      const transform = clip?.transform || {};
+
+      return `
+        <h3>Transform</h3>
+
+        ${this.rangeControl("Scale", "scale", transform.scale ?? 100, 10, 300)}
+        ${this.rangeControl("Rotation", "rotation", transform.rotation ?? 0, -180, 180)}
+        ${this.rangeControl("Opacity", "opacity", transform.opacity ?? 100, 0, 100)}
+
+        <button type="button" class="vyora-tool-primary"
+          data-action="apply-transform">
+          Apply Transform
+        </button>
+      `;
+    },
+
+    rangeControl(label, field, value, min, max, step = 1) {
+      return `
+        <div class="vyora-tool-control">
+          <label>${label}
+            <span data-value-for="${field}">${value}</span>
+          </label>
+          <input type="range"
+            data-field="${field}"
+            min="${min}" max="${max}"
+            step="${step}" value="${value}">
         </div>
       `;
     },
 
-    renderSlider(label, key, value, min, max) {
+    numberControl(label, field, value, min) {
       return `
-        <div class="vyora-tool-slider">
-          <div>
-            <label>${label}</label>
-            <output data-output="${key}">${Number(value).toFixed(0)}%</output>
-          </div>
-          <input type="range"
-            min="${min}" max="${max}" step="1"
-            data-value="${key}" value="${value}">
-        </div>
+        <label class="vyora-tool-label">${label}</label>
+        <input type="number" min="${min}"
+          data-field="${field}" value="${value}">
       `;
     },
 
     bindEvents() {
-      if (!this.container) return;
-
-      this.container.addEventListener("click", event => {
-        const tab = event.target.closest("[data-panel]");
-
-        if (tab) {
-          this.setPanel(tab.dataset.panel);
-          return;
-        }
-
-        const textItem = event.target.closest("[data-text-id]");
-
-        if (textItem) {
-          this.selectedTextId = textItem.dataset.textId;
-          this.render();
-          return;
-        }
-
-        const effectButton = event.target.closest("[data-effect]");
-
-        if (effectButton) {
-          this.addEffect(effectButton.dataset.effect);
-          return;
-        }
-
-        const toggle = event.target.closest("[data-effect-toggle]");
-
-        if (toggle) {
-          const state = this.getState();
-          const effect = state.effects.find(
-            item => item.id === toggle.dataset.effectToggle
-          );
-
-          if (effect) {
-            this.project.updateEffect(effect.id, {
-              enabled: !effect.enabled
-            });
-
-            this.render();
-          }
-
-          return;
-        }
-
-        const deleteEffect = event.target.closest("[data-effect-delete]");
-
-        if (deleteEffect) {
-          this.project.removeEffect(deleteEffect.dataset.effectDelete);
-          this.render();
-          return;
-        }
-
-        const preset = event.target.closest("[data-crop-preset]");
-
-        if (preset) {
-          this.applyCropPreset(Number(preset.dataset.cropPreset));
-          return;
-        }
-
-        const action = event.target.closest("[data-action]");
-
-        if (action) {
-          this.handleAction(action.dataset.action);
-        }
+      this.container.querySelectorAll("[data-panel]").forEach(button => {
+        button.addEventListener("click", () => {
+          this.setPanel(button.dataset.panel);
+        });
       });
 
-      this.container.addEventListener("input", event => {
-        const input = event.target;
+      this.container.querySelectorAll("[data-crop-preset]").forEach(button => {
+        button.addEventListener("click", () => {
+          const value = Number(button.dataset.cropPreset);
 
-        if (!input.dataset.value) return;
+          this.updateClip("Crop preset", {
+            crop: {
+              top: value,
+              bottom: value,
+              left: 0,
+              right: 0
+            }
+          });
 
-        const key = input.dataset.value;
+          this.render();
+        });
+      });
 
-        if (key.startsWith("crop-")) {
-          const side = key.replace("crop-", "");
-          const value = Number(input.value);
-
+      this.container.querySelectorAll("[data-field]").forEach(input => {
+        input.addEventListener("input", () => {
           const output = this.container.querySelector(
-            `[data-output="${key}"]`
+            `[data-value-for="${input.dataset.field}"]`
           );
 
-          if (output) output.textContent = value + "%";
-
-          this.updateCrop(side, value);
-          return;
-        }
-
-        if (key.startsWith("text-")) {
-          this.updateTextProperty(key, input.value);
-          return;
-        }
-
-        if (key === "audio-volume") {
-          this.updateAudioProperty("volume", Number(input.value) / 100);
-        }
-
-        if (key === "audio-speed") {
-          this.updateAudioProperty("speed", Number(input.value) / 100);
-        }
-
-        if (key === "text-content") {
-          this.updateTextProperty(key, input.value);
-        }
-
-        if (key === "text-size") {
-          this.updateTextProperty(key, Number(input.value));
-        }
-
-        if (key === "text-color") {
-          this.updateTextProperty(key, input.value);
-        }
-
-        if (key === "text-style") {
-          this.updateTextProperty(key, input.value);
-        }
+          if (output) output.textContent = input.value;
+        });
       });
 
-      this.container.addEventListener("change", event => {
-        const input = event.target;
-        const key = input.dataset.value;
+      this.container.querySelectorAll("[data-action]").forEach(button => {
+        button.addEventListener("click", () => {
+          this.handleAction(button.dataset.action);
+        });
+      });
 
-        if (!key) return;
+      this.container.querySelectorAll("[data-text-style]").forEach(button => {
+        button.addEventListener("click", () => {
+          const text = this.getSelectedText();
+          if (!text) return;
 
-        if (key === "audio-muted") {
-          this.updateAudioProperty("muted", input.checked);
-        }
+          this.project.updateTextLayer(text.id, {
+            style: button.dataset.textStyle
+          });
 
-        if (key === "project-width" || key === "project-height") {
-          this.applyTransformFromInputs();
-        }
+          this.render();
+        });
+      });
 
-        if (
-          key === "project-fps" ||
-          key === "project-background"
-        ) {
-          this.applyTransformFromInputs();
-        }
+      this.container.querySelectorAll("[data-effect]").forEach(button => {
+        button.addEventListener("click", () => {
+          this.addEffect(button.dataset.effect);
+        });
+      });
 
-        if (
-          key === "clip-start" ||
-          key === "clip-duration" ||
-          key === "source-start"
-        ) {
-          this.applyTrimFromInputs();
-        }
+      this.container.querySelectorAll("[data-remove-effect]").forEach(button => {
+        button.addEventListener("click", () => {
+          this.removeEffect(button.dataset.removeEffect);
+        });
       });
     },
 
     handleAction(action) {
-      switch (action) {
-        case "crop-equal":
-          this.applyEqualCrop();
-          break;
+      const clip = this.selectedClip;
 
-        case "apply-trim":
-          this.applyTrimFromInputs();
-          break;
-
-        case "add-text":
-          this.addText();
-          break;
-
-        case "delete-text":
-          this.deleteText();
-          break;
-
-        case "apply-audio":
-          this.applyAudioSettings();
-          break;
-
-        case "apply-transform":
-          this.applyTransformFromInputs();
-          break;
+      if (action === "add-text") {
+        this.addText();
+        return;
       }
-    },
 
-    applyCropPreset(value) {
-      const found = this.getSelectedClip();
-      if (!found) return false;
+      if (action === "save-text") {
+        const text = this.getSelectedText();
+        if (!text) return;
 
-      const success = this.project.setCrop(found.clip.id, {
-        top: value,
-        bottom: value,
-        left: 0,
-        right: 0
-      });
+        this.project.updateTextLayer(text.id, {
+          text: this.container.querySelector('[data-field="text-value"]').value,
+          color: this.container.querySelector('[data-field="text-color"]').value,
+          fontSize: Number(this.container.querySelector('[data-field="text-size"]')?.value || text.fontSize || 48)
+        });
 
-      if (success) {
-        this.emit("crop-preset", { value });
         this.render();
+        return;
       }
 
-      return success;
-    },
+      if (action === "delete-text") {
+        const text = this.getSelectedText();
+        if (!text) return;
 
-    applyEqualCrop() {
-      const found = this.getSelectedClip();
-      if (!found) return false;
-
-      const topInput = this.container.querySelector(
-        '[data-value="crop-top"]'
-      );
-
-      const value = Number(topInput?.value || 0);
-
-      const success = this.project.setCrop(found.clip.id, {
-        top: value,
-        bottom: value
-      });
-
-      if (success) this.render();
-
-      return success;
-    },
-
-    updateCrop(side, value) {
-      const found = this.getSelectedClip();
-      if (!found) return false;
-
-      if (!["top", "bottom", "left", "right"].includes(side)) {
-        return false;
+        this.project.removeTextLayer(text.id);
+        this.selectedTextId = null;
+        this.render();
+        return;
       }
 
-      const success = this.project.setCrop(found.clip.id, {
-        [side]: Number(value)
-      });
+      if (!clip) return;
 
-      if (success) {
-        this.emit("crop-change", {
-          clipId: found.clip.id,
-          side,
-          value: Number(value)
+      if (action === "equal-crop") {
+        const top = Number(
+          this.container.querySelector('[data-field="crop-top"]').value
+        );
+
+        this.updateClip("Equal crop", {
+          crop: { ...clip.crop, top, bottom: top }
+        });
+
+        return;
+      }
+
+      if (action === "apply-trim") {
+        const start = Number(
+          this.container.querySelector('[data-field="trim-start"]').value
+        );
+
+        const duration = Number(
+          this.container.querySelector('[data-field="trim-duration"]').value
+        );
+
+        if (!Number.isFinite(start) || !Number.isFinite(duration) ||
+            start < 0 || duration <= 0) {
+          this.toast("Valid trim values enter karo.");
+          return;
+        }
+
+        this.updateClip("Trim clip", {
+          sourceStart: start,
+          duration
+        });
+
+        return;
+      }
+
+      if (action === "apply-audio") {
+        this.updateClip("Audio settings", {
+          volume: Number(this.container.querySelector('[data-field="audio-volume"]').value),
+          speed: Number(this.container.querySelector('[data-field="audio-speed"]').value),
+          fadeIn: Number(this.container.querySelector('[data-field="fade-in"]').value),
+          fadeOut: Number(this.container.querySelector('[data-field="fade-out"]').value)
+        });
+
+        return;
+      }
+
+      if (action === "apply-transform") {
+        this.updateClip("Transform settings", {
+          transform: {
+            scale: Number(this.container.querySelector('[data-field="scale"]').value),
+            rotation: Number(this.container.querySelector('[data-field="rotation"]').value),
+            opacity: Number(this.container.querySelector('[data-field="opacity"]').value)
+          }
         });
       }
-
-      return success;
     },
 
-    applyTrimFromInputs() {
-      const found = this.getSelectedClip();
-      if (!found) return false;
+    addEffect(type) {
+      const clip = this.selectedClip;
+      if (!clip) return;
 
-      const start = Number(
-        this.container.querySelector('[data-value="clip-start"]')?.value
-      );
-
-      const duration = Number(
-        this.container.querySelector('[data-value="clip-duration"]')?.value
-      );
-
-      const sourceStart = Number(
-        this.container.querySelector('[data-value="source-start"]')?.value
-      );
-
-      if (
-        !Number.isFinite(start) ||
-        !Number.isFinite(duration) ||
-        !Number.isFinite(sourceStart) ||
-        start < 0 ||
-        duration <= 0 ||
-        sourceStart < 0
-      ) {
-                throw new Error("Invalid clip timing values.");
-      }
-
-      const clip = this.state.tracks
-        .flatMap(track => track.clips || [])
-        .find(item => item.id === clipId);
-
-      if (!clip) {
-        throw new Error("Clip not found.");
-      }
-
-      clip.start = start;
-      clip.duration = duration;
-      clip.sourceStart = sourceStart;
-
-      return clip;
-    });
-  }
-
-  splitClip(clipId, splitAt) {
-    return this.update("Split clip", () => {
-      const track = this.state.tracks.find(item =>
-        (item.clips || []).some(clip => clip.id === clipId)
-      );
-
-      if (!track) throw new Error("Clip not found.");
-
-      const index = track.clips.findIndex(clip => clip.id === clipId);
-      const clip = track.clips[index];
-      const offset = Number(splitAt) - Number(clip.start);
-
-      if (
-        !Number.isFinite(offset) ||
-        offset <= 0 ||
-        offset >= Number(clip.duration)
-      ) {
-        throw new Error("Invalid split position.");
-      }
-
-      const secondClip = this.clone(clip);
-      secondClip.id = this.createId("clip");
-      secondClip.start = Number(clip.start) + offset;
-      secondClip.duration = Number(clip.duration) - offset;
-      secondClip.sourceStart = Number(clip.sourceStart || 0) + offset;
-
-      clip.duration = offset;
-
-      track.clips.splice(index + 1, 0, secondClip);
-
-      return secondClip;
-    });
-  }
-
-  removeClip(clipId) {
-    return this.update("Remove clip", () => {
-      for (const track of this.state.tracks) {
-        const index = track.clips.findIndex(clip => clip.id === clipId);
-
-        if (index !== -1) {
-          const removed = track.clips.splice(index, 1)[0];
-
-          if (this.state.selectedClipId === clipId) {
-            this.state.selectedClipId = null;
-          }
-
-          return removed;
-        }
-      }
-
-      return null;
-    });
-  }
-
-  selectClip(clipId) {
-    return this.update("Select clip", () => {
-      this.state.selectedClipId = clipId || null;
-      return this.state.selectedClipId;
-    }, { history: false });
-  }
-
-  getSelectedClip() {
-    const id = this.state.selectedClipId;
-
-    for (const track of this.state.tracks) {
-      const clip = track.clips.find(item => item.id === id);
-      if (clip) return clip;
-    }
-
-    return null;
-  }
-
-  addTextLayer(data = {}) {
-    return this.update("Add text", () => {
-      const layer = {
-        id: this.createId("text"),
-        text: data.text || "Your text",
-        start: Number(data.start) || 0,
-        duration: Number(data.duration) || 5,
-        x: Number(data.x ?? 50),
-        y: Number(data.y ?? 50),
-        fontSize: Number(data.fontSize) || 48,
-        color: data.color || "#ffffff",
-        style: data.style || "clean",
-        opacity: Number(data.opacity ?? 100),
-        rotation: Number(data.rotation) || 0
-      };
-
-      this.state.textLayers.push(layer);
-      return layer;
-    });
-  }
-
-  updateTextLayer(id, changes = {}) {
-    return this.update("Update text", () => {
-      const layer = this.state.textLayers.find(item => item.id === id);
-      if (!layer) throw new Error("Text layer not found.");
-
-      Object.assign(layer, changes);
-      return layer;
-    });
-  }
-
-  removeTextLayer(id) {
-    return this.update("Remove text", () => {
-      const index = this.state.textLayers.findIndex(item => item.id === id);
-      if (index === -1) return null;
-
-      return this.state.textLayers.splice(index, 1)[0];
-    });
-  }
-
-  addEffect(data = {}) {
-    return this.update("Add effect", () => {
       const effect = {
-        id: this.createId("effect"),
-        type: data.type || "brightness",
-        value: Number(data.value ?? 100),
-        enabled: data.enabled !== false,
-        clipId: data.clipId || null
+        id: "effect_" + Date.now(),
+        type,
+        value: 100
       };
 
-      this.state.effects.push(effect);
-      return effect;
-    });
-  }
+      this.updateProject("Add effect", () => {
+        if (!Array.isArray(clip.effects)) clip.effects = [];
+        clip.effects.push(effect);
+      });
 
-  updateEffect(id, changes = {}) {
-    return this.update("Update effect", () => {
-      const effect = this.state.effects.find(item => item.id === id);
-      if (!effect) throw new Error("Effect not found.");
+      this.render();
+    },
 
-      Object.assign(effect, changes);
-      return effect;
-    });
-  }
+    removeEffect(id) {
+      const clip = this.selectedClip;
+      if (!clip) return;
 
-  removeEffect(id) {
-    return this.update("Remove effect", () => {
-      const index = this.state.effects.findIndex(item => item.id === id);
-      if (index === -1) return null;
+      this.updateProject("Remove effect", () => {
+        clip.effects = (clip.effects || []).filter(
+          effect => effect.id !== id
+        );
+      });
 
-      return this.state.effects.splice(index, 1)[0];
-    });
-  }
+      this.render();
+    },
 
-  exportProject() {
-    return JSON.stringify(this.state, null, 2);
-  }
-
-  importProject(json) {
-    const data = typeof json === "string" ? JSON.parse(json) : json;
-
-    if (!data || !Array.isArray(data.tracks)) {
-      throw new Error("Invalid project file.");
+    escape(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
     }
+  };
 
-    return this.update("Import project", () => {
-      this.state = {
-        ...this.state,
-        ...this.clone(data)
-      };
-
-      return this.state;
-    });
-  }
-}
-
-window.VYORAProject = new ProjectManager();
+  window.VYORATools = Tools;
 
 })();
+          
