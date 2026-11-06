@@ -799,13 +799,13 @@
 
     renderIcons();
 
-    timeline = new window.VYORATimeline(
-      $("#vyoraTimeline")
-    );
+    timeline = window.VYORATimeline.init(
+  $("#vyoraTimeline")
+);
 
-    tools = new window.VYORATools(
-      $("#vyoraToolsPanel")
-    );
+tools = window.VYORATools.init(
+  $("#vyoraToolsPanel")
+);
 
     bindEditorEvents();
     bindExportEvents();
