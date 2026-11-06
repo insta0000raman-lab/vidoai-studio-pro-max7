@@ -1,4 +1,9 @@
 
+/* =========================================================
+   VYORA STUDIO — COMPLETE MEDIA ENGINE
+   File: scripts/media.js
+   ========================================================= */
+
 (() => {
   "use strict";
 
@@ -6,308 +11,407 @@
   const DB_VERSION = 1;
   const STORE_NAME = "assets";
 
+  const CONFIG = {
+    metadataTimeout: 30000,
+    maxFileSize: 1024 * 1024 * 1024
+  };
+
   const Media = {
+    db: null,
     assets: new Map(),
     activeVideo: null,
+    activeVideoElement: null,
     activeAudio: null,
     previewElement: null,
-    objectUrls: new Set(),
-    db: null,
-    ready: null,
+    previewVolume: 1,
+    previewMuted: false,
+    initialized: false,
+    initializationPromise: null,
+    canvas: null,
+    canvasContext: null,
+    crop: {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1
+    },
+
+    /* ---------- GENERAL ---------- */
 
     createId() {
       return "media_" + Date.now().toString(36) +
         "_" + Math.random().toString(36).slice(2, 9);
     },
 
+    dispatch(name, detail = {}) {
+      window.dispatchEvent(
+        new CustomEvent("vyora:media-" + name, { detail })
+      );
+    },
+
+    formatError(error) {
+      return error?.message || String(error || "Unknown error");
+    },
+
+    /* ---------- FILE VALIDATION ---------- */
+
+    validateFile(file, type) {
+      if (!(file instanceof Blob)) {
+        throw new Error("Invalid file selected.");
+      }
+
+      if (!file.size) {
+        throw new Error("Selected file is empty.");
+      }
+
+      if (file.size > CONFIG.maxFileSize) {
+        throw new Error("File exceeds the 1 GB import limit.");
+      }
+
+      const mime = (file.type || "").toLowerCase();
+
+      if (mime && !mime.startsWith(type + "/")) {
+        throw new Error(
+          "Invalid " + type + " file. Detected type: " + mime
+        );
+      }
+
+      return true;
+    },
+
+    /* ---------- DATABASE ---------- */
+
     openDatabase() {
       if (this.db) return Promise.resolve(this.db);
 
-      if (!("indexedDB" in window)) {
-        return Promise.reject(new Error("IndexedDB is not supported"));
-      }
-
       return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error("IndexedDB is not supported."));
+          return;
+        }
+
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onupgradeneeded = () => {
-          const db = request.result;
+        request.onupgradeneeded = event => {
+          const db = event.target.result;
 
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             const store = db.createObjectStore(STORE_NAME, {
               keyPath: "id"
             });
-            store.createIndex("type", "type", { unique: false });
+
+            store.createIndex("type", "type", {
+              unique: false
+            });
           }
         };
 
-        request.onsuccess = () => {
-          this.db = request.result;
+        request.onsuccess = event => {
+          this.db = event.target.result;
+
+          this.db.onversionchange = () => {
+            this.db.close();
+            this.db = null;
+          };
+
           resolve(this.db);
         };
 
-        request.onerror = () => reject(request.error);
-      });
-    },
-
-    async databaseRequest(mode, action) {
-      const db = await this.openDatabase();
-
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, mode);
-        const store = transaction.objectStore(STORE_NAME);
-
-        let request;
-
-        try {
-          request = action(store);
-        } catch (error) {
-          reject(error);
-          return;
-        }
-
-        if (request) {
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        } else {
-          transaction.oncomplete = () => resolve(true);
-          transaction.onerror = () => reject(transaction.error);
-          transaction.onabort = () => reject(transaction.error);
-        }
-      });
-    },
-
-    async saveAsset(asset) {
-      const record = {
-        id: asset.id,
-        type: asset.type,
-        name: asset.name,
-        size: asset.size,
-        sizeText: asset.sizeText,
-        mimeType: asset.mimeType,
-        duration: asset.duration,
-        width: asset.width || 0,
-        height: asset.height || 0,
-        aspectRatio: asset.aspectRatio || 0,
-        lastModified: asset.lastModified || 0,
-        file: asset.file
-      };
-
-      await this.databaseRequest("readwrite", store =>
-        store.put(record)
-      );
-
-      return true;
-    },
-
-    async restoreAssets() {
-      try {
-        const records = await this.databaseRequest("readonly", store =>
-          store.getAll()
-        );
-
-        for (const record of records || []) {
-          if (!record.file) continue;
-
-          const url = this.createURL(record.file);
-
-          this.assets.set(record.id, {
-            ...record,
-            url,
-            file: record.file,
-            restored: true
-          });
-        }
-
-        this.emit("assets-restored", {
-          assets: this.getAllAssets()
-        });
-
-        return this.getAllAssets();
-      } catch (error) {
-        console.error("VYORA media restore failed:", error);
-        return [];
-      }
-    },
-
-    createURL(file) {
-      const url = URL.createObjectURL(file);
-      this.objectUrls.add(url);
-      return url;
-    },
-
-    revokeURL(url) {
-      if (!url || !this.objectUrls.has(url)) return;
-
-      URL.revokeObjectURL(url);
-      this.objectUrls.delete(url);
-    },
-
-    formatTime(seconds) {
-      seconds = Math.max(0, Number(seconds) || 0);
-      const minutes = Math.floor(seconds / 60);
-      const secs = Math.floor(seconds % 60);
-      const hundredths = Math.floor((seconds % 1) * 100);
-
-      return String(minutes).padStart(2, "0") + ":" +
-        String(secs).padStart(2, "0") + "." +
-        String(hundredths).padStart(2, "0");
-    },
-
-    formatSize(bytes) {
-      bytes = Number(bytes) || 0;
-      if (bytes < 1024) return bytes + " B";
-      if (bytes < 1024 * 1024) {
-        return (bytes / 1024).toFixed(1) + " KB";
-      }
-      if (bytes < 1024 * 1024 * 1024) {
-        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-      }
-      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-    },
-
-    isVideo(file) {
-      return !!file && (
-        file.type.startsWith("video/") ||
-        /\.(mp4|mov|webm|m4v|3gp|mkv)$/i.test(file.name)
-      );
-    },
-
-    isAudio(file) {
-      return !!file && (
-        file.type.startsWith("audio/") ||
-        /\.(mp3|wav|aac|m4a|ogg|flac)$/i.test(file.name)
-      );
-    },
-
-    readVideoMetadata(file, url) {
-      return new Promise((resolve, reject) => {
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.muted = true;
-        video.playsInline = true;
-        video.src = url;
-
-        const cleanup = () => {
-          video.onloadedmetadata = null;
-          video.onerror = null;
+        request.onerror = () => {
+          reject(request.error || new Error("Database opening failed."));
         };
 
-        video.onloadedmetadata = () => {
-          const result = {
-            duration: Number.isFinite(video.duration)
-              ? video.duration : 0,
-            width: video.videoWidth || 0,
-            height: video.videoHeight || 0
+        request.onblocked = () => {
+          console.warn("VYORA database opening is blocked.");
+        };
+      });
+    },
+
+    databaseRequest(mode, operation) {
+      return this.openDatabase().then(db => {
+        return new Promise((resolve, reject) => {
+          let transaction;
+
+          try {
+            transaction = db.transaction(STORE_NAME, mode);
+          } catch (error) {
+            reject(error);
+            return;
+          }
+
+          let request;
+          let result;
+          let requestDone = false;
+
+          try {
+            request = operation(
+              transaction.objectStore(STORE_NAME)
+            );
+          } catch (error) {
+            reject(error);
+            return;
+          }
+
+          request.onsuccess = () => {
+            result = request.result;
+            requestDone = true;
           };
 
-          cleanup();
-          video.removeAttribute("src");
-          video.load();
-          resolve(result);
-        };
+          request.onerror = () => {
+            reject(request.error || new Error("Database request failed."));
+          };
 
-        video.onerror = () => {
-          cleanup();
-          reject(new Error("Video metadata could not be read"));
-        };
+          transaction.oncomplete = () => {
+            resolve(requestDone ? result : undefined);
+          };
+
+          transaction.onerror = () => {
+            reject(
+              transaction.error || new Error("Database transaction failed.")
+            );
+          };
+
+          transaction.onabort = () => {
+            reject(
+              transaction.error || new Error("Database transaction aborted.")
+            );
+          };
+        });
       });
     },
 
-    readAudioMetadata(file, url) {
+    saveAssetRecord(record) {
+      return this.databaseRequest("readwrite", store => store.put(record));
+    },
+
+    getAssetRecord(id) {
+      return this.databaseRequest("readonly", store => store.get(id));
+    },
+
+    getAllAssetRecords() {
+      return this.databaseRequest("readonly", store => store.getAll());
+    },
+
+    deleteAssetRecord(id) {
+      return this.databaseRequest("readwrite", store => store.delete(id));
+    },
+
+    /* ---------- OBJECT URL ---------- */
+
+    createURL(blob) {
+      return URL.createObjectURL(blob);
+    },
+
+    revokeURL(asset) {
+      if (asset?.url) {
+        try {
+          URL.revokeObjectURL(asset.url);
+        } catch (error) {
+          console.warn("VYORA URL cleanup failed.", error);
+        }
+      }
+    },
+
+    /* ---------- METADATA ---------- */
+
+    readMetadata(file, type) {
       return new Promise((resolve, reject) => {
-        const audio = document.createElement("audio");
-        audio.preload = "metadata";
-        audio.src = url;
+        const element = document.createElement(
+          type === "video" ? "video" : "audio"
+        );
 
-        audio.onloadedmetadata = () => {
-          const duration = Number.isFinite(audio.duration)
-            ? audio.duration : 0;
+        const url = URL.createObjectURL(file);
+        let finished = false;
 
-          audio.removeAttribute("src");
-          audio.load();
-          resolve({ duration });
+        element.preload = "metadata";
+        element.muted = true;
+
+        if (type === "video") {
+          element.playsInline = true;
+        }
+
+        const cleanup = () => {
+          element.removeEventListener("loadedmetadata", onMetadata);
+          element.removeEventListener("error", onError);
+          element.removeEventListener("abort", onAbort);
+          clearTimeout(timer);
+
+          element.removeAttribute("src");
+
+          try {
+            element.load();
+          } catch (_) {}
+
+          URL.revokeObjectURL(url);
         };
 
-        audio.onerror = () => {
-          reject(new Error("Audio metadata could not be read"));
+        const finish = (error, result) => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+
+          if (error) reject(error);
+          else resolve(result);
         };
+
+        const onMetadata = () => {
+          const duration = element.duration;
+
+          if (!Number.isFinite(duration) || duration <= 0) {
+            finish(new Error(
+              "Media duration is invalid or unavailable."
+            ));
+            return;
+          }
+
+          const result = {
+            duration,
+            width: type === "video" ? element.videoWidth : 0,
+            height: type === "video" ? element.videoHeight : 0
+          };
+
+          if (
+            type === "video" &&
+            (!result.width || !result.height)
+          ) {
+            finish(new Error(
+              "Video dimensions could not be detected."
+            ));
+            return;
+          }
+
+          finish(null, result);
+        };
+
+        const onError = () => {
+          const code = element.error?.code;
+
+          const messages = {
+            1: "Media loading was aborted.",
+            2: "Media file could not be read.",
+            3: "Video decoding failed. Codec may be unsupported.",
+            4: "Video format or codec is not supported by this browser."
+          };
+
+          finish(new Error(
+            messages[code] ||
+            "Browser could not read this media file."
+          ));
+        };
+
+        const onAbort = () => {
+          finish(new Error("Media metadata loading was aborted."));
+        };
+
+        const timer = setTimeout(() => {
+          finish(new Error(
+            "Metadata loading timed out. Try an MP4 H.264 video."
+          ));
+        }, CONFIG.metadataTimeout);
+
+        element.addEventListener("loadedmetadata", onMetadata, {
+          once: true
+        });
+
+        element.addEventListener("error", onError, {
+          once: true
+        });
+
+        element.addEventListener("abort", onAbort, {
+          once: true
+        });
+
+        element.src = url;
+
+        try {
+          element.load();
+        } catch (error) {
+          finish(error);
+        }
       });
     },
 
-    async loadVideo(file) {
-      if (!this.isVideo(file)) {
-        throw new Error("Please select a supported video file");
-      }
+    /* ---------- ASSET CREATION ---------- */
 
-      const url = this.createURL(file);
+    async importAsset(file, type) {
+      this.validateFile(file, type);
+
+      this.dispatch("import-start", {
+        type,
+        name: file.name
+      });
+
+      let metadata;
 
       try {
-        const metadata = await this.readVideoMetadata(file, url);
-
-        const asset = {
-          id: this.createId(),
-          type: "video",
-          name: file.name,
-          size: file.size,
-          sizeText: this.formatSize(file.size),
-          mimeType: file.type || "video/mp4",
-          url,
-          file,
-          duration: metadata.duration,
-          width: metadata.width,
-          height: metadata.height,
-          aspectRatio: metadata.height
-            ? metadata.width / metadata.height : 0,
-          lastModified: file.lastModified || 0
-        };
-
-        await this.saveAsset(asset);
-        this.assets.set(asset.id, asset);
-
-        this.emit("asset-added", { asset: this.publicAsset(asset) });
-        return this.publicAsset(asset);
+        metadata = await this.readMetadata(file, type);
       } catch (error) {
-        this.revokeURL(url);
+        this.dispatch("import-error", {
+          type,
+          name: file.name,
+          error: this.formatError(error)
+        });
+
         throw error;
       }
+
+      const id = this.createId();
+      const url = this.createURL(file);
+
+      const record = {
+        id,
+        type,
+        name: file.name || "Untitled " + type,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        duration: metadata.duration,
+        width: metadata.width,
+        height: metadata.height,
+        lastModified: file.lastModified || Date.now(),
+        createdAt: Date.now(),
+        blob: file
+      };
+
+      try {
+        await this.saveAssetRecord(record);
+      } catch (error) {
+        URL.revokeObjectURL(url);
+
+        this.dispatch("import-error", {
+          type,
+          name: file.name,
+          error: this.formatError(error)
+        });
+
+        throw new Error(
+          "Media was read but browser storage failed: " +
+          this.formatError(error)
+        );
+      }
+
+      const asset = {
+        ...record,
+        file,
+        url
+      };
+
+      delete asset.blob;
+
+      this.assets.set(id, asset);
+
+      this.dispatch("import-success", {
+        asset: this.publicAsset(asset)
+      });
+
+      return this.publicAsset(asset);
     },
 
-    async loadAudio(file) {
-      if (!this.isAudio(file)) {
-        throw new Error("Please select a supported audio file");
-      }
+    loadVideo(file) {
+      return this.importAsset(file, "video");
+    },
 
-      const url = this.createURL(file);
-
-      try {
-        const metadata = await this.readAudioMetadata(file, url);
-
-        const asset = {
-          id: this.createId(),
-          type: "audio",
-          name: file.name,
-          size: file.size,
-          sizeText: this.formatSize(file.size),
-          mimeType: file.type || "audio/mpeg",
-          url,
-          file,
-          duration: metadata.duration,
-          width: 0,
-          height: 0,
-          aspectRatio: 0,
-          lastModified: file.lastModified || 0
-        };
-
-        await this.saveAsset(asset);
-        this.assets.set(asset.id, asset);
-
-        this.emit("asset-added", { asset: this.publicAsset(asset) });
-        return this.publicAsset(asset);
-      } catch (error) {
-        this.revokeURL(url);
-        throw error;
-      }
+    loadAudio(file) {
+      return this.importAsset(file, "audio");
     },
 
     publicAsset(asset) {
@@ -317,17 +421,14 @@
         id: asset.id,
         type: asset.type,
         name: asset.name,
-        size: asset.size,
-        sizeText: asset.sizeText,
         mimeType: asset.mimeType,
-        url: asset.url,
+        size: asset.size,
         duration: asset.duration,
         width: asset.width,
         height: asset.height,
-        aspectRatio: asset.aspectRatio,
         lastModified: asset.lastModified,
-        file: asset.file,
-        restored: !!asset.restored
+        createdAt: asset.createdAt,
+        url: asset.url
       };
     },
 
@@ -341,135 +442,276 @@
       );
     },
 
-    async removeAsset(id) {
-      const asset = this.assets.get(id);
-      if (!asset) return false;
+    /* ---------- RESTORE AFTER REFRESH ---------- */
 
-      if (this.activeVideo?.assetId === id) {
-        this.stopVideo();
-        this.activeVideo = null;
+    async restoreAssets() {
+      const records = await this.getAllAssetRecords();
+
+      for (const record of records || []) {
+        if (!record?.id || !record.blob) continue;
+
+        const previous = this.assets.get(record.id);
+
+        if (previous) this.revokeURL(previous);
+
+        const asset = {
+          id: record.id,
+          type: record.type,
+          name: record.name,
+          mimeType: record.mimeType,
+          size: record.size,
+          duration: record.duration,
+          width: record.width || 0,
+          height: record.height || 0,
+          lastModified: record.lastModified,
+          createdAt: record.createdAt,
+          file: record.blob,
+          url: this.createURL(record.blob)
+        };
+
+        this.assets.set(asset.id, asset);
       }
 
-      if (this.activeAudio?.assetId === id) {
-        this.stopAudio();
-      }
-
-      this.revokeURL(asset.url);
-      this.assets.delete(id);
-
-      try {
-        await this.databaseRequest("readwrite", store =>
-          store.delete(id)
-        );
-      } catch (error) {
-        console.error("VYORA media delete failed:", error);
-      }
-
-      this.emit("asset-removed", { id });
-      return true;
-    },
-
-    attachPreview(element) {
-      if (!(element instanceof HTMLVideoElement)) {
-        throw new Error("Preview must be a video element");
-      }
-
-      this.previewElement = element;
-      return element;
-    },
-
-    async openVideo(assetId, videoElement = this.previewElement) {
-      const asset = this.assets.get(assetId);
-
-      if (!asset || asset.type !== "video") {
-        throw new Error("Video asset not found");
-      }
-
-      if (!(videoElement instanceof HTMLVideoElement)) {
-        throw new Error("Preview video element missing");
-      }
-
-      this.pauseVideo();
-
-      videoElement.pause();
-      videoElement.src = asset.url;
-      videoElement.preload = "metadata";
-      videoElement.playsInline = true;
-      videoElement.muted = true;
-
-      await new Promise((resolve, reject) => {
-        if (videoElement.readyState >= 1) {
-          resolve();
-          return;
-        }
-
-        videoElement.onloadedmetadata = () => resolve();
-        videoElement.onerror = () =>
-          reject(new Error("Could not open video preview"));
-        videoElement.load();
+      this.dispatch("assets-restored", {
+        count: this.assets.size
       });
 
-      this.previewElement = videoElement;
-      this.activeVideo = {
-        assetId,
-        element: videoElement
-      };
+      return this.getAllAssets();
+    },
 
-      this.emit("video-opened", {
-        asset: this.publicAsset(asset)
+    async initialize() {
+      if (this.initialized) return true;
+
+      if (this.initializationPromise) {
+        return this.initializationPromise;
+      }
+
+      this.initializationPromise = (async () => {
+        await this.openDatabase();
+        await this.restoreAssets();
+
+        this.initialized = true;
+
+        this.dispatch("ready", {
+          assets: this.getAllAssets()
+        });
+
+        return true;
+      })();
+
+      try {
+        return await this.initializationPromise;
+      } catch (error) {
+        this.initializationPromise = null;
+        throw error;
+      }
+    },
+
+    /* ---------- PREVIEW ATTACHMENT ---------- */
+
+    attachPreview(videoElement) {
+      if (!(videoElement instanceof HTMLVideoElement)) {
+        throw new Error("A valid video preview element is required.");
+      }
+
+      this.previewElement = videoElement;
+
+      videoElement.playsInline = true;
+      videoElement.preload = "auto";
+      videoElement.volume = this.previewVolume;
+      videoElement.muted = this.previewMuted;
+
+      videoElement.addEventListener("ended", () => {
+        this.dispatch("ended", {
+          currentTime: videoElement.currentTime
+        });
+      });
+
+      videoElement.addEventListener("timeupdate", () => {
+        this.dispatch("timeupdate", {
+          currentTime: videoElement.currentTime,
+          duration: videoElement.duration
+        });
+      });
+
+      videoElement.addEventListener("error", () => {
+        this.dispatch("preview-error", {
+          error: videoElement.error?.message ||
+            "Preview playback failed."
+        });
       });
 
       return videoElement;
     },
 
-    playVideo() {
-      const video = this.activeVideo?.element;
-      if (!video) return Promise.resolve(false);
+    /* ---------- OPEN VIDEO ---------- */
 
-      return video.play().then(() => true).catch((error) => {
-        console.warn("Video playback blocked:", error);
-        return false;
+    async openVideo(assetId, videoElement = this.previewElement) {
+      const asset = this.assets.get(assetId);
+
+      if (!asset || asset.type !== "video") {
+        throw new Error("Video asset not found.");
+      }
+
+      if (!(videoElement instanceof HTMLVideoElement)) {
+        throw new Error("Video preview element is unavailable.");
+      }
+
+      this.pauseVideo();
+
+      videoElement.pause();
+      videoElement.removeAttribute("src");
+      videoElement.load();
+
+      videoElement.src = asset.url;
+      videoElement.playsInline = true;
+      videoElement.preload = "auto";
+      videoElement.muted = this.previewMuted;
+      videoElement.volume = this.previewVolume;
+
+      await new Promise((resolve, reject) => {
+        let done = false;
+
+        const cleanup = () => {
+          videoElement.removeEventListener("loadedmetadata", success);
+          videoElement.removeEventListener("error", failure);
+          clearTimeout(timer);
+        };
+
+        const finish = (error) => {
+          if (done) return;
+          done = true;
+          cleanup();
+
+          if (error) reject(error);
+          else resolve(true);
+        };
+
+        const success = () => finish();
+
+        const failure = () => finish(
+          new Error("Video preview could not be loaded.")
+        );
+
+        const timer = setTimeout(() => {
+          finish(new Error("Preview loading timed out."));
+        }, CONFIG.metadataTimeout);
+
+        videoElement.addEventListener("loadedmetadata", success, {
+          once: true
+        });
+
+        videoElement.addEventListener("error", failure, {
+          once: true
+        });
+
+        videoElement.load();
+
+        if (videoElement.readyState >= 1) {
+          success();
+        }
       });
-    },
 
-    pauseVideo() {
-      const video = this.activeVideo?.element;
-      if (video) video.pause();
-    },
+      this.activeVideo = asset;
+      this.activeVideoElement = videoElement;
+      this.previewElement = videoElement;
 
-    togglePlayback() {
-      const video = this.activeVideo?.element;
-      if (!video) return Promise.resolve(false);
+      this.dispatch("video-opened", {
+        asset: this.publicAsset(asset)
+      });
 
-      return video.paused ? this.playVideo() : (
-        this.pauseVideo(), Promise.resolve(true)
-      );
-    },
-
-    stopVideo() {
-      const video = this.activeVideo?.element;
-      if (!video) return;
-
-      video.pause();
-      try {
-        video.currentTime = 0;
-      } catch (_) {}
-    },
-
-    seek(seconds) {
-      const video = this.activeVideo?.element;
-      if (!video) return false;
-
-      const time = Math.max(0, Number(seconds) || 0);
-      video.currentTime = Math.min(
-        time,
-        Number.isFinite(video.duration) ? video.duration : time
-      );
       return true;
     },
 
+    /* ---------- PLAYBACK ---------- */
+
+    async playVideo() {
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (!video || !video.src) return false;
+
+      try {
+        await video.play();
+        this.dispatch("play", {
+          currentTime: video.currentTime
+        });
+        return true;
+      } catch (error) {
+        this.dispatch("play-error", {
+          error: this.formatError(error)
+        });
+        return false;
+      }
+    },
+
+    pauseVideo() {
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (video) video.pause();
+
+      this.dispatch("pause", {
+        currentTime: video?.currentTime || 0
+      });
+
+      return true;
+    },
+
+    async togglePlayback() {
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (!video) return false;
+
+      if (video.paused) {
+        return this.playVideo();
+      }
+
+      this.pauseVideo();
+      return true;
+    },
+
+    stopVideo() {
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (video) {
+        video.pause();
+
+        try {
+          video.currentTime = 0;
+        } catch (_) {}
+      }
+
+      return true;
+    },
+
+    seek(time) {
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (!video || !Number.isFinite(Number(time))) {
+        return false;
+      }
+
+      const duration = Number.isFinite(video.duration)
+        ? video.duration
+        : 0;
+
+      const target = Math.max(
+        0,
+        Math.min(Number(time), duration || Number(time))
+      );
+
+      try {
+        video.currentTime = target;
+        this.dispatch("seek", { time: target });
+        return true;
+      } catch (error) {
+        console.warn("VYORA seek failed.", error);
+        return false;
+      }
+    },
+
     getPlaybackInfo() {
-      const video = this.activeVideo?.element;
+      const video = this.activeVideoElement || this.previewElement;
+
       if (!video) {
         return {
           currentTime: 0,
@@ -481,205 +723,353 @@
 
       return {
         currentTime: video.currentTime || 0,
-        duration: Number.isFinite(video.duration) ? video.duration : 0,
+        duration: Number.isFinite(video.duration)
+          ? video.duration
+          : 0,
         paused: video.paused,
-        ended: video.ended
+        ended: video.ended,
+        playbackRate: video.playbackRate
       };
     },
 
     setPlaybackRate(rate) {
-      const video = this.activeVideo?.element;
+      const video = this.activeVideoElement || this.previewElement;
+
       if (!video) return false;
 
-      video.playbackRate = Math.max(0.25, Math.min(4, Number(rate) || 1));
+      const value = Number(rate);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return false;
+      }
+
+      video.playbackRate = Math.min(4, Math.max(0.25, value));
       return true;
     },
 
-    setPreviewVolume(volume) {
-      const video = this.activeVideo?.element;
-      if (!video) return false;
+    setPreviewVolume(value) {
+      const volume = Number(value);
 
-      video.volume = Math.max(0, Math.min(1, Number(volume) || 0));
+      if (!Number.isFinite(volume)) return false;
+
+      this.previewVolume = Math.max(0, Math.min(1, volume));
+
+      const video = this.activeVideoElement || this.previewElement;
+
+      if (video) video.volume = this.previewVolume;
+
+      if (this.activeAudio) {
+        this.activeAudio.volume = this.previewVolume;
+      }
+
       return true;
     },
 
     setPreviewMuted(muted) {
-      const video = this.activeVideo?.element;
-      if (!video) return false;
+      this.previewMuted = Boolean(muted);
 
-      video.muted = !!muted;
-      return true;
-    },
+      const video = this.activeVideoElement || this.previewElement;
 
-    setCrop(clipId, crop) {
-      const project = window.VYORAProject;
-      if (!project) return false;
-
-      return project.updateClip(clipId, {
-        crop: {
-          top: Math.max(0, Number(crop.top) || 0),
-          right: Math.max(0, Number(crop.right) || 0),
-          bottom: Math.max(0, Number(crop.bottom) || 0),
-          left: Math.max(0, Number(crop.left) || 0)
-        }
-      });
-    },
-
-    validCrop(crop = {}) {
-      const values = [
-        crop.top, crop.right, crop.bottom, crop.left
-      ].map(value => Number(value) || 0);
-
-      return values.every(value => value >= 0 && value < 100) &&
-        values[0] + values[2] < 100 &&
-        values[1] + values[3] < 100;
-    },
-
-    resetCrop(clipId) {
-      return this.setCrop(clipId, {
-        top: 0, right: 0, bottom: 0, left: 0
-      });
-    },
-
-    getCanvasSize() {
-      const project = window.VYORAProject;
-      return project?.data?.canvas || {
-        width: 1080,
-        height: 1920,
-        ratio: "9:16"
-      };
-    },
-
-    createPreviewCanvas(width, height) {
-      const canvas = document.createElement("canvas");
-      canvas.width = width || 1080;
-      canvas.height = height || 1920;
-      return canvas;
-    },
-
-    drawVideoFrame(context, video, width, height, crop = {}) {
-      if (!context || !video || video.readyState < 2) return false;
-
-      const top = Math.max(0, Number(crop.top) || 0) / 100;
-      const right = Math.max(0, Number(crop.right) || 0) / 100;
-      const bottom = Math.max(0, Number(crop.bottom) || 0) / 100;
-      const left = Math.max(0, Number(crop.left) || 0) / 100;
-
-      const sx = video.videoWidth * left;
-      const sy = video.videoHeight * top;
-      const sw = video.videoWidth * (1 - left - right);
-      const sh = video.videoHeight * (1 - top - bottom);
-
-      if (sw <= 0 || sh <= 0) return false;
-
-      context.drawImage(
-        video,
-        sx, sy, sw, sh,
-        0, 0, width, height
-      );
+      if (video) video.muted = this.previewMuted;
 
       return true;
     },
 
-    async loadFiles(files) {
-      const results = [];
+    /* ---------- AUDIO PREVIEW ---------- */
 
-      for (const file of Array.from(files || [])) {
-        try {
-          if (this.isVideo(file)) {
-            results.push(await this.loadVideo(file));
-          } else if (this.isAudio(file)) {
-            results.push(await this.loadAudio(file));
-          }
-        } catch (error) {
-          console.error("Could not import:", file.name, error);
-        }
-      }
-
-      return results;
-    },
-
-    stopAudio() {
-      if (!this.activeAudio) return;
-
-      try {
-        this.activeAudio.pause();
-        this.activeAudio.currentTime = 0;
-      } catch (_) {}
-
-      this.activeAudio = null;
-    },
-
-    async playAudio(assetId, options = {}) {
+    async playAudio(assetId) {
       const asset = this.assets.get(assetId);
+
       if (!asset || asset.type !== "audio") {
-        throw new Error("Audio asset not found");
+        throw new Error("Audio asset not found.");
       }
 
       this.stopAudio();
 
       const audio = new Audio(asset.url);
-      audio.volume = Math.max(0, Math.min(
-        1, Number(options.volume ?? 1)
-      ));
 
-      audio.loop = !!options.loop;
+      audio.volume = this.previewVolume;
+      audio.muted = this.previewMuted;
+      audio.preload = "auto";
+
       this.activeAudio = audio;
 
       try {
         await audio.play();
+        this.dispatch("audio-play", { assetId });
         return true;
       } catch (error) {
-        this.activeAudio = null;
-        throw error;
+        this.dispatch("audio-error", {
+          error: this.formatError(error)
+        });
+        return false;
       }
     },
 
-    emit(name, detail = {}) {
-      window.dispatchEvent(new CustomEvent("vyora:media-" + name, {
-        detail
-      }));
+    pauseAudio() {
+      if (this.activeAudio) {
+        this.activeAudio.pause();
+      }
+      return true;
     },
 
-    async initialize() {
-      if (this.ready) return this.ready;
+    stopAudio() {
+      if (this.activeAudio) {
+        this.activeAudio.pause();
 
-      this.ready = (async () => {
-        await this.openDatabase();
-        await this.restoreAssets();
-        return true;
-      })();
+        try {
+          this.activeAudio.currentTime = 0;
+        } catch (_) {}
 
-      return this.ready;
+        this.activeAudio.src = "";
+        this.activeAudio = null;
+      }
+
+      return true;
     },
 
-    async destroy() {
-      this.stopVideo();
+    /* ---------- CROP ---------- */
+
+    validCrop(crop) {
+      if (!crop) return false;
+
+      const values = [
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height
+      ].map(Number);
+
+      if (!values.every(Number.isFinite)) return false;
+
+      const [x, y, width, height] = values;
+
+      return (
+        x >= 0 &&
+        y >= 0 &&
+        width > 0 &&
+        height > 0 &&
+        x + width <= 1 &&
+    
+        y + height <= 1
+      );
+    },
+
+    setCrop(crop) {
+      if (!this.validCrop(crop)) {
+        throw new Error("Invalid crop dimensions.");
+      }
+
+      this.crop = {
+        x: Number(crop.x),
+        y: Number(crop.y),
+        width: Number(crop.width),
+        height: Number(crop.height)
+      };
+
+      this.dispatch("crop-change", {
+        crop: { ...this.crop }
+      });
+
+      return { ...this.crop };
+    },
+
+    resetCrop() {
+      this.crop = {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1
+      };
+
+      this.dispatch("crop-change", {
+        crop: { ...this.crop }
+      });
+
+      return { ...this.crop };
+    },
+
+    /* ---------- CANVAS ---------- */
+
+    createCanvas(width, height) {
+      const w = Math.max(1, Math.floor(Number(width) || 1));
+      const h = Math.max(1, Math.floor(Number(height) || 1));
+
+      this.canvas = document.createElement("canvas");
+      this.canvas.width = w;
+      this.canvas.height = h;
+
+      this.canvasContext = this.canvas.getContext("2d", {
+        alpha: false
+      });
+
+      if (!this.canvasContext) {
+        throw new Error("Canvas 2D context is unavailable.");
+      }
+
+      return this.canvas;
+    },
+
+    getCanvas() {
+      return this.canvas;
+    },
+
+    getCanvasContext() {
+      return this.canvasContext;
+    },
+
+    drawPreview(options = {}) {
+      const video = this.activeVideoElement || this.previewElement;
+      const canvas = this.canvas;
+      const ctx = this.canvasContext;
+
+      if (!video || !canvas || !ctx) return false;
+
+      if (!video.videoWidth || !video.videoHeight) {
+        return false;
+      }
+
+      const crop = options.crop || this.crop;
+
+      if (!this.validCrop(crop)) {
+        return false;
+      }
+
+      const sx = crop.x * video.videoWidth;
+      const sy = crop.y * video.videoHeight;
+      const sw = crop.width * video.videoWidth;
+      const sh = crop.height * video.videoHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.drawImage(
+        video,
+        sx,
+        sy,
+        sw,
+        sh,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      return true;
+    },
+
+    /* ---------- ASSET REMOVAL ---------- */
+
+    async removeAsset(id) {
+      const asset = this.assets.get(id);
+
+      if (!asset) return false;
+
+      if (this.activeVideo?.id === id) {
+        this.pauseVideo();
+
+        const video = this.activeVideoElement;
+
+        if (video) {
+          video.removeAttribute("src");
+          video.load();
+        }
+
+        this.activeVideo = null;
+        this.activeVideoElement = null;
+      }
+
+      if (this.activeAudio) {
+        this.stopAudio();
+      }
+
+      await this.deleteAssetRecord(id);
+
+      this.revokeURL(asset);
+      this.assets.delete(id);
+
+      this.dispatch("asset-removed", { id });
+
+      return true;
+    },
+
+    /* ---------- STORAGE INFORMATION ---------- */
+
+    async getStorageInfo() {
+      if (navigator.storage?.estimate) {
+        try {
+          const info = await navigator.storage.estimate();
+
+          return {
+            usage: info.usage || 0,
+            quota: info.quota || 0,
+            available: Math.max(
+              0,
+              (info.quota || 0) - (info.usage || 0)
+            )
+          };
+        } catch (error) {
+          console.warn("Storage estimate unavailable.", error);
+        }
+      }
+
+      return {
+        usage: null,
+        quota: null,
+        available: null
+      };
+    },
+
+    async requestPersistentStorage() {
+      if (!navigator.storage?.persist) return false;
+
+      try {
+        return await navigator.storage.persist();
+      } catch (_) {
+        return false;
+      }
+    },
+
+    /* ---------- CLEANUP ---------- */
+
+    destroy() {
       this.stopAudio();
+      this.pauseVideo();
 
-      for (const url of Array.from(this.objectUrls)) {
-        this.revokeURL(url);
+      for (const asset of this.assets.values()) {
+        this.revokeURL(asset);
       }
 
       this.assets.clear();
+
+      if (this.previewElement) {
+        this.previewElement.pause();
+        this.previewElement.removeAttribute("src");
+
+        try {
+          this.previewElement.load();
+        } catch (_) {}
+      }
+
+      if (this.db) {
+        this.db.close();
+        this.db = null;
+      }
+
       this.activeVideo = null;
+      this.activeVideoElement = null;
       this.activeAudio = null;
       this.previewElement = null;
+      this.initialized = false;
+      this.initializationPromise = null;
     }
   };
 
   window.VYORAMedia = Media;
 
-  Media.initialize()
-    .then(() => {
-      window.dispatchEvent(new CustomEvent("vyora:media-ready"));
-    })
-    .catch(error => {
-      console.error("VYORA media initialization failed:", error);
-      window.dispatchEvent(new CustomEvent("vyora:media-error", {
-        detail: { error: error.message }
-      }));
-    });
+  window.addEventListener("pagehide", () => {
+    Media.pauseVideo();
+    Media.pauseAudio();
+  });
 
 })();
-
+      
