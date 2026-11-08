@@ -1,10 +1,13 @@
+
 /* =========================================
    VPEET STUDIO — VIDEO PREVIEW ENGINE
-   Local video preview and framing controls
+   Fixed for current index.html IDs
 ========================================= */
 
 (function () {
   "use strict";
+
+  const $ = (selector) => document.querySelector(selector);
 
   const project = window.VPEET_PROJECT =
     window.VPEET_PROJECT || {
@@ -20,46 +23,40 @@
       zoom: 100
     };
 
-  const $ = (selector) => document.querySelector(selector);
+  // Match the actual IDs in index.html
+  const video = $("#mainVideo");
+  const uploadInput = $("#videoInput");
+  const previewFrame = $("#previewFrame");
+  const previewStage = $("#previewStage");
+  const placeholder = $("#previewPlaceholder");
 
-  const video = $("#videoPreview");
+  const previewStatus = $("#previewStatus");
+  const uploadedFile = $("#uploadedFile");
+  const fileNameDisplay = $("#fileName");
+  const fileDetails = $("#fileDetails");
+  const removeButton = $("#removeVideoButton");
 
-  const uploadInput =
-    $("#videoUpload") ||
-    $("#videoInput") ||
-    $('input[type="file"][accept*="video"]');
+  const playButton = $("#playPauseButton");
+  const playIcon = $("#playPauseIcon");
+  const muteButton = $("#muteButton");
+  const muteIcon = $("#muteIcon");
 
-  const previewFrame = $(".preview-frame");
-  const previewStage = $(".preview-stage");
+  const currentTimeDisplay = $("#currentTime");
+  const durationDisplay = $("#totalDuration");
+  const previewRatio = $("#previewRatio");
+  const previewResolution = $("#previewResolution");
 
-  const emptyPreview =
-    $("#previewEmpty") ||
-    $(".preview-empty");
+  const trimStart = $("#trimStart");
+  const trimEnd = $("#trimEnd");
 
-  const fileNameDisplay =
-    $("#videoFileName") ||
-    $("#videoName");
-
-  const playButton =
-    $("#previewPlayButton") ||
-    $("#playPreviewButton");
-
-  const seekBar =
-    $("#previewSeek") ||
-    $("#videoSeek");
-
-  const currentTimeDisplay = $("#previewCurrentTime");
-  const durationDisplay = $("#previewDuration");
-
-  if (!video) {
-    console.error("VPEET: #videoPreview element not found.");
+  if (!video || !uploadInput) {
+    console.error("VPEET: mainVideo or videoInput not found.");
     return;
   }
 
   video.playsInline = true;
   video.preload = "metadata";
-
-  /* ---------- HELPERS ---------- */
+  video.controls = false;
 
   function formatTime(seconds) {
     if (!Number.isFinite(seconds)) return "00:00";
@@ -67,48 +64,80 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
 
-    return String(mins).padStart(2, "0") +
-      ":" +
+    return String(mins).padStart(2, "0") + ":" +
       String(secs).padStart(2, "0");
-  }
-
-  function updateTime() {
-    if (currentTimeDisplay) {
-      currentTimeDisplay.textContent =
-        formatTime(video.currentTime);
-    }
-
-    if (seekBar && video.duration) {
-      seekBar.value =
-        (video.currentTime / video.duration) * 100;
-    }
   }
 
   function showVideo() {
     video.style.display = "block";
 
-    if (emptyPreview) {
-      emptyPreview.style.display = "none";
-    }
-
-    if (previewFrame) {
-      previewFrame.classList.add("has-video");
-    }
+    if (placeholder) placeholder.style.display = "none";
+    if (previewStatus) previewStatus.textContent = "VIDEO LOADED";
+    if (previewFrame) previewFrame.classList.add("has-video");
+    if (playButton) playButton.disabled = false;
+    if (muteButton) muteButton.disabled = false;
+    if (uploadedFile) uploadedFile.hidden = false;
   }
 
   function showEmpty() {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
     video.style.display = "none";
 
-    if (emptyPreview) {
-      emptyPreview.style.display = "";
+    if (placeholder) placeholder.style.display = "";
+    if (previewStatus) previewStatus.textContent = "NO VIDEO";
+    if (previewFrame) previewFrame.classList.remove("has-video");
+    if (playButton) playButton.disabled = true;
+    if (muteButton) muteButton.disabled = true;
+    if (uploadedFile) uploadedFile.hidden = true;
+
+    if (currentTimeDisplay) currentTimeDisplay.textContent = "00:00";
+    if (durationDisplay) durationDisplay.textContent = "00:00";
+    if (previewResolution) previewResolution.textContent = "Resolution: —";
+    if (previewRatio) previewRatio.textContent = "Ratio: —";
+
+    if (playIcon) playIcon.textContent = "▶";
+  }
+
+  function updateTime() {
+    if (currentTimeDisplay) {
+      currentTimeDisplay.textContent = formatTime(video.currentTime);
     }
 
-    if (previewFrame) {
-      previewFrame.classList.remove("has-video");
+    if (durationDisplay) {
+      durationDisplay.textContent = formatTime(video.duration);
     }
   }
 
-  /* ---------- VIDEO UPLOAD ---------- */
+  function updatePreview() {
+    video.style.objectPosition =
+      project.positionX + "% " + project.positionY + "%";
+
+    video.style.transform =
+      "scale(" + (project.zoom / 100) + ")";
+
+    video.style.objectFit =
+      project.borderMode === "crop" ? "cover" : "contain";
+
+    if (previewStage) {
+      previewStage.dataset.borderMode = project.borderMode;
+      previewStage.style.setProperty(
+        "--preview-border",
+        project.borderAmount + "%"
+      );
+    }
+
+    if (previewFrame) {
+      previewFrame.dataset.borderMode = project.borderMode;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("vpeet:preview-update", {
+        detail: project
+      })
+    );
+  }
 
   function loadVideo(file) {
     if (!file) return;
@@ -127,6 +156,7 @@
     project.video = file;
     project.videoUrl = objectUrl;
     project.fileName = file.name;
+    project.duration = 0;
 
     video.pause();
     video.src = objectUrl;
@@ -136,36 +166,42 @@
       fileNameDisplay.textContent = file.name;
     }
 
+    if (fileDetails) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      fileDetails.textContent = sizeMB + " MB · Loading video...";
+    }
+
     showVideo();
 
     video.onloadedmetadata = function () {
       project.duration = video.duration;
 
-      if (durationDisplay) {
-        durationDisplay.textContent =
-          formatTime(video.duration);
+      if (fileDetails) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        fileDetails.textContent =
+          sizeMB + " MB · " + formatTime(video.duration);
       }
 
-      if (seekBar) {
-        seekBar.value = 0;
+      if (previewResolution) {
+        previewResolution.textContent =
+          "Resolution: " + video.videoWidth + " × " + video.videoHeight;
       }
-
-      const trimStart =
-        $("#trimStart") || $("#trimStartInput");
-
-      const trimEnd =
-        $("#trimEnd") || $("#trimEndInput");
 
       if (trimStart) {
-        trimStart.value = 0;
+        trimStart.min = 0;
         trimStart.max = video.duration;
+        trimStart.value = 0;
+        trimStart.disabled = false;
       }
 
       if (trimEnd) {
-        trimEnd.value = video.duration;
+        trimEnd.min = 0;
         trimEnd.max = video.duration;
+        trimEnd.value = video.duration;
+        trimEnd.disabled = false;
       }
 
+      updateTime();
       updatePreview();
 
       window.dispatchEvent(
@@ -178,20 +214,44 @@
           }
         })
       );
+
+      console.log("VPEET: Video loaded successfully.");
+    };
+
+    video.onerror = function () {
+      console.error("VPEET: Video could not be decoded.");
+      if (previewStatus) previewStatus.textContent = "VIDEO ERROR";
+      alert("This video format could not be previewed. Try another MP4 video.");
     };
   }
 
-  if (uploadInput) {
-    uploadInput.addEventListener("change", function (event) {
-      const file = event.target.files &&
-        event.target.files[0];
+  // Upload
+  uploadInput.addEventListener("change", function (event) {
+    const file = event.target.files && event.target.files[0];
+    loadVideo(file);
+  });
 
-      loadVideo(file);
+  // Remove video
+  if (removeButton) {
+    removeButton.addEventListener("click", function () {
+      if (project.videoUrl) {
+        URL.revokeObjectURL(project.videoUrl);
+      }
+
+      project.video = null;
+      project.videoUrl = null;
+      project.fileName = "";
+      project.duration = 0;
+
+      uploadInput.value = "";
+      showEmpty();
+
+      if (trimStart) trimStart.disabled = true;
+      if (trimEnd) trimEnd.disabled = true;
     });
   }
 
-  /* ---------- PLAY / PAUSE ---------- */
-
+  // Play / pause
   async function togglePlayback() {
     if (!project.video) return;
 
@@ -199,7 +259,7 @@
       try {
         await video.play();
       } catch (error) {
-        console.warn("Preview playback failed:", error);
+        console.warn("Playback failed:", error);
       }
     } else {
       video.pause();
@@ -210,199 +270,130 @@
     playButton.addEventListener("click", togglePlayback);
   }
 
-  video.addEventListener("click", togglePlayback);
-
   video.addEventListener("play", function () {
-    if (playButton) {
-      playButton.textContent = "Pause";
-      playButton.setAttribute("aria-label", "Pause preview");
-    }
+    if (playIcon) playIcon.textContent = "Ⅱ";
   });
 
   video.addEventListener("pause", function () {
-    if (playButton) {
-      playButton.textContent = "Play";
-      playButton.setAttribute("aria-label", "Play preview");
-    }
+    if (playIcon) playIcon.textContent = "▶";
   });
 
-  /* ---------- TIMELINE ---------- */
+  video.addEventListener("timeupdate", updateTime);
+  video.addEventListener("loadedmetadata", updateTime);
 
-  if (seekBar) {
-    seekBar.addEventListener("input", function () {
-      if (!video.duration) return;
-
-      video.currentTime =
-        (Number(seekBar.value) / 100) * video.duration;
+  // Mute
+  if (muteButton) {
+    muteButton.addEventListener("click", function () {
+      video.muted = !video.muted;
+      if (muteIcon) muteIcon.textContent = video.muted ? "🔇" : "🔊";
     });
   }
 
-  video.addEventListener("timeupdate", updateTime);
-
-  video.addEventListener("loadedmetadata", updateTime);
-
-  /* ---------- ASPECT RATIO ---------- */
-
+  // Aspect ratio
   function setAspectRatio(ratio) {
     if (!ratio) return;
 
     project.aspectRatio = ratio;
 
-    if (previewFrame) {
-      const parts = String(ratio).split(":");
+    if (previewFrame && ratio !== "custom") {
+      const parts = ratio.split(":");
       const width = Number(parts[0]);
       const height = Number(parts[1]);
 
       if (width > 0 && height > 0) {
-        previewFrame.style.aspectRatio =
-          width + " / " + height;
+        previewFrame.style.aspectRatio = width + " / " + height;
       }
+    }
+
+    if (previewRatio) {
+      previewRatio.textContent = "Ratio: " + ratio;
     }
 
     document.querySelectorAll("[data-ratio]").forEach((button) => {
       button.classList.toggle(
         "selected",
-        button.dataset.ratio === String(ratio)
+        button.dataset.ratio === ratio
       );
     });
 
     updatePreview();
-
-    window.dispatchEvent(
-      new CustomEvent("vpeet:preview-update")
-    );
   }
 
   document.addEventListener("click", function (event) {
     const button = event.target.closest("[data-ratio]");
-
-    if (!button) return;
-
-    setAspectRatio(button.dataset.ratio);
+    if (button) setAspectRatio(button.dataset.ratio);
   });
 
-  /* ---------- BORDER MODE ---------- */
+  // Border mode
+  document.querySelectorAll('input[name="borderMode"]').forEach((input) => {
+    input.addEventListener("change", function () {
+      project.borderMode = input.value;
 
-  function setBorderMode(mode) {
-    if (!["crop", "blur"].includes(mode)) return;
+      document.querySelectorAll(".choice-card").forEach((card) => {
+        const radio = card.querySelector('input[name="borderMode"]');
+        card.classList.toggle("selected", !!radio && radio.checked);
+      });
 
-    project.borderMode = mode;
-    updatePreview();
-  }
-
-  document.addEventListener("click", function (event) {
-    const button = event.target.closest("[data-border-mode]");
-
-    if (!button) return;
-
-    setBorderMode(button.dataset.borderMode);
+      updatePreview();
+    });
   });
 
-  /* ---------- BORDER AMOUNT ---------- */
-
-  const borderInput =
-    $("#borderAmount") ||
-    $("#borderAmountInput");
+  // Border amount
+  const borderInput = $("#borderAmount");
+  const borderValue = $("#borderAmountValue");
 
   if (borderInput) {
     borderInput.addEventListener("input", function () {
-      project.borderAmount = Math.max(
-        0,
-        Math.min(20, Number(borderInput.value) || 0)
-      );
-
+      project.borderAmount = Number(borderInput.value) || 0;
+      if (borderValue) borderValue.textContent = project.borderAmount + "%";
       updatePreview();
     });
   }
 
-  /* ---------- VIDEO POSITION ---------- */
+  // Position
+  document.querySelectorAll("[data-position]").forEach((button) => {
+    button.addEventListener("click", function () {
+      const position = button.dataset.position;
 
-  const positionXInput = $("#positionX");
-  const positionYInput = $("#positionY");
-  const zoomInput = $("#videoZoom");
+      project.positionY =
+        position === "top" ? 0 :
+        position === "bottom" ? 100 : 50;
 
-  if (positionXInput) {
-    positionXInput.addEventListener("input", function () {
-      project.positionX = Number(positionXInput.value);
-      updatePreview();
-    });
-  }
-
-  if (positionYInput) {
-    positionYInput.addEventListener("input", function () {
-      project.positionY = Number(positionYInput.value);
-      updatePreview();
-    });
-  }
-
-  if (zoomInput) {
-    zoomInput.addEventListener("input", function () {
-      project.zoom = Math.max(
-        50,
-        Math.min(200, Number(zoomInput.value) || 100)
-      );
+      document.querySelectorAll("[data-position]").forEach((item) => {
+        item.classList.toggle("selected", item === button);
+      });
 
       updatePreview();
     });
-  }
-
-  /* ---------- PREVIEW RENDERING ---------- */
-
-  function updatePreview() {
-    const mode = project.borderMode;
-
-    video.style.objectPosition =
-      project.positionX + "% " +
-      project.positionY + "%";
-
-    video.style.transform =
-      "scale(" + (project.zoom / 100) + ")";
-
-    video.style.objectFit =
-      mode === "crop" ? "cover" : "contain";
-
-    if (previewStage) {
-      previewStage.dataset.borderMode = mode;
-      previewStage.style.setProperty(
-        "--preview-border",
-        project.borderAmount + "%"
-      );
-    }
-
-    if (previewFrame) {
-      previewFrame.dataset.borderMode = mode;
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("vpeet:preview-update", {
-        detail: project
-      })
-    );
-  }
-
-  /* ---------- ERROR HANDLING ---------- */
-
-  video.addEventListener("error", function () {
-    console.error("VPEET: Video preview could not be loaded.");
-
-    alert(
-      "Video preview could not be loaded. Try another video format."
-    );
   });
 
-  /* ---------- PUBLIC API ---------- */
+  // Trim controls
+  if (trimStart) {
+    trimStart.addEventListener("input", function () {
+      const value = Number(trimStart.value) || 0;
+      const label = $("#trimStartValue");
+      if (label) label.textContent = formatTime(value);
+      if (video.duration) video.currentTime = value;
+    });
+  }
 
+  if (trimEnd) {
+    trimEnd.addEventListener("input", function () {
+      const label = $("#trimEndValue");
+      if (label) label.textContent = formatTime(Number(trimEnd.value));
+    });
+  }
+
+  // Public API
   window.VPEET_PREVIEW = {
     loadVideo,
     updatePreview,
     setAspectRatio,
-    setBorderMode,
     togglePlayback,
     getVideo: () => video,
     getProject: () => project
   };
 
   showEmpty();
-
   console.log("VPEET Studio Preview Engine Ready.");
 })();
