@@ -1,279 +1,548 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#090a12">
-  <meta name="description" content="VYORA Studio — Create videos with precision.">
-  <title>VYORA Studio</title>
+  <meta name="theme-color" content="#080914">
+  <meta name="description" content="VPEET Studio - Pro Editing. Made Easy.">
+  <title>VPEET Studio — Pro Editing Made Easy</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles/base.css">
-  <link rel="stylesheet" href="styles/editor.css">
 
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <div id="app" class="app-shell">
+  <div class="app-shell">
 
-    <header class="topbar">
-      <a class="brand" href="#" aria-label="VYORA Studio home" id="homeBrand">
-        <span class="brand-mark">V</span>
-        <span class="brand-name">VYORA<span>STUDIO</span></span>
-      </a>
+    <!-- APP HEADER -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div class="brand-copy">
+          <h1>VPEET <span>Studio</span></h1>
+          <p>PRO EDITING. MADE EASY.</p>
+        </div>
+      </div>
 
-      <div class="topbar-actions">
-        <button class="icon-button" id="notificationsButton" aria-label="Notifications">
-          <i data-lucide="bell"></i>
-          <span class="notification-dot"></span>
+      <div class="header-actions">
+        <button class="icon-button" id="helpButton" aria-label="Help">
+          ?
         </button>
-        <button class="avatar-button" id="profileButton" aria-label="Profile">V</button>
+        <button class="icon-button" id="settingsButton" aria-label="Settings">
+          ⚙
+        </button>
       </div>
     </header>
 
-    <main id="mainContent">
+    <!-- MAIN EDITOR -->
+    <main class="editor-layout">
 
-      <section class="screen active" id="homeScreen">
-        <div class="home-hero">
-          <div class="hero-orb orb-one"></div>
-          <div class="hero-orb orb-two"></div>
+      <!-- VIDEO PREVIEW AREA -->
+      <section class="preview-section" aria-label="Video preview">
 
-          <div class="hero-content">
-            <div class="eyebrow">
-              <span class="live-dot"></span>
-              YOUR CREATIVE SPACE
+        <div class="preview-topbar">
+          <div class="preview-heading">
+            <span class="live-indicator"></span>
+            <span>LIVE PREVIEW</span>
+          </div>
+          <div class="preview-status" id="previewStatus">
+            NO VIDEO
+          </div>
+        </div>
+
+        <div class="preview-stage" id="previewStage">
+          <div class="preview-background" id="previewBackground"></div>
+
+          <div class="preview-frame" id="previewFrame">
+            <video
+              id="mainVideo"
+              playsinline
+              preload="metadata"
+            ></video>
+
+            <div class="preview-placeholder" id="previewPlaceholder">
+              <div class="placeholder-icon">▶</div>
+              <h2>Your video appears here</h2>
+              <p>Upload a video to start editing</p>
             </div>
 
-            <h1>Make every<br><span>frame matter.</span></h1>
+            <div class="text-overlay-container" id="textOverlayContainer">
+              <!-- Text layers will be rendered here -->
+            </div>
+          </div>
+        </div>
 
-            <p class="hero-description">
-              A powerful creative studio for your next visual story.
-              Import your footage and bring your ideas to life.
+        <!-- VIDEO CONTROLS -->
+        <div class="preview-controls">
+          <button class="control-button" id="playPauseButton" disabled>
+            <span id="playPauseIcon">▶</span>
+          </button>
+
+          <div class="timeline-info">
+            <span id="currentTime">00:00</span>
+            <div class="mini-progress">
+              <div id="miniProgressFill"></div>
+            </div>
+            <span id="totalDuration">00:00</span>
+          </div>
+
+          <button class="control-button" id="muteButton" disabled>
+            <span id="muteIcon">🔊</span>
+          </button>
+        </div>
+
+        <div class="preview-footer">
+          <span id="previewRatio">Ratio: —</span>
+          <span id="previewResolution">Resolution: —</span>
+        </div>
+      </section>
+
+      <!-- WIZARD PANEL -->
+      <section class="wizard-section" aria-label="Editing steps">
+
+        <div class="wizard-top">
+          <div>
+            <p class="eyebrow">YOUR EDITING WORKSPACE</p>
+            <h2 id="stepHeading">Let's start editing</h2>
+            <p id="stepDescription">
+              Follow each step to create your video.
+            </p>
+          </div>
+
+          <div class="step-counter" id="stepCounter">
+            <strong>01</strong>
+            <span>/ 16</span>
+          </div>
+        </div>
+
+        <!-- PROGRESS -->
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <!-- STEP CONTENT -->
+        <div class="step-content" id="stepContent">
+
+          <!-- STEP 1: UPLOAD -->
+          <div class="wizard-step active" data-step="0">
+            <div class="step-icon">↑</div>
+            <h3>Upload your video</h3>
+            <p class="step-help">
+              Select the video you want to edit. Your preview will appear above.
             </p>
 
-            <button class="primary-button hero-start" id="startEditingButton">
-              <span>Start your video edit</span>
-              <i data-lucide="arrow-up-right"></i>
-            </button>
+            <label class="upload-box" for="videoInput" id="uploadBox">
+              <span class="upload-icon">＋</span>
+              <strong>Choose Video</strong>
+              <span>MP4, MOV, WebM and supported formats</span>
+              <small>Video stays in your browser for local processing</small>
+            </label>
 
-            <div class="hero-footnote">
-              <i data-lucide="shield-check"></i>
-              Your media stays on your device
+            <input
+              type="file"
+              id="videoInput"
+              accept="video/*"
+              hidden
+            >
+
+            <div class="uploaded-file" id="uploadedFile" hidden>
+              <span class="file-icon">▣</span>
+              <div class="file-details">
+                <strong id="fileName">Video name</strong>
+                <small id="fileDetails">Video details</small>
+              </div>
+              <button type="button" id="removeVideoButton">Remove</button>
             </div>
           </div>
 
-          <div class="hero-art" aria-hidden="true">
-            <div class="art-ring ring-one"></div>
-            <div class="art-ring ring-two"></div>
-            <div class="art-core">
-              <div class="art-play"><i data-lucide="play"></i></div>
+          <!-- STEP 2: ASPECT RATIO -->
+          <div class="wizard-step" data-step="1">
+            <div class="step-icon">▣</div>
+            <h3>Choose aspect ratio</h3>
+            <p class="step-help">
+              Select the shape of your final video.
+            </p>
+
+            <div class="ratio-grid" id="ratioGrid">
+              <button type="button" class="ratio-option selected" data-ratio="9:16">
+                <span class="ratio-shape portrait"></span>
+                <strong>9:16</strong>
+                <small>Reels / Shorts</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="16:9">
+                <span class="ratio-shape landscape"></span>
+                <strong>16:9</strong>
+                <small>YouTube</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="1:1">
+                <span class="ratio-shape square"></span>
+                <strong>1:1</strong>
+                <small>Square</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="4:5">
+                <span class="ratio-shape portrait-short"></span>
+                <strong>4:5</strong>
+                <small>Instagram</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="4:3">
+                <span class="ratio-shape landscape-short"></span>
+                <strong>4:3</strong>
+                <small>Classic</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="3:4">
+                <span class="ratio-shape portrait"></span>
+                <strong>3:4</strong>
+                <small>Portrait</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="21:9">
+                <span class="ratio-shape ultrawide"></span>
+                <strong>21:9</strong>
+                <small>Cinematic</small>
+              </button>
+
+              <button type="button" class="ratio-option" data-ratio="custom">
+                <span class="ratio-shape custom-shape">＋</span>
+                <strong>Custom</strong>
+                <small>Your size</small>
+              </button>
             </div>
-            <div class="art-chip chip-top">CREATIVE</div>
-            <div class="art-chip chip-bottom">STUDIO / 01</div>
-          </div>
-        </div>
 
-        <section class="home-section">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">GET STARTED</span>
-              <h2>Your next project</h2>
+            <div class="custom-ratio-fields" id="customRatioFields" hidden>
+              <label>
+                Width
+                <input type="number" id="customWidth" min="1" max="7680" value="1080">
+              </label>
+              <label>
+                Height
+                <input type="number" id="customHeight" min="1" max="7680" value="1920">
+              </label>
             </div>
-            <span class="section-count">01 / 03</span>
           </div>
 
-          <div class="feature-grid">
-            <article class="feature-card">
-              <div class="feature-icon purple"><i data-lucide="video"></i></div>
-              <h3>Video editing</h3>
-              <p>Trim, crop and shape your footage.</p>
-            </article>
+          <!-- STEP 3: BORDER MODE -->
+          <div class="wizard-step" data-step="2">
+            <div class="step-icon">◫</div>
+            <h3>Remove black borders</h3>
+            <p class="step-help">
+              Choose how VPEET should fill your video frame.
+            </p>
 
-            <article class="feature-card">
-              <div class="feature-icon cyan"><i data-lucide="type"></i></div>
-              <h3>Creative titles</h3>
-              <p>Give your story its own identity.</p>
-            </article>
+            <div class="choice-list">
+              <label class="choice-card selected">
+                <input type="radio" name="borderMode" value="crop" checked>
+                <span class="choice-symbol">▣</span>
+                <span class="choice-copy">
+                  <strong>Crop</strong>
+                  <small>Fill the frame by cropping extra areas.</small>
+                </span>
+                <span class="choice-check">✓</span>
+              </label>
 
-            <article class="feature-card">
-              <div class="feature-icon pink"><i data-lucide="audio-lines"></i></div>
-              <h3>Sound design</h3>
-              <p>Build the right mood with audio.</p>
-            </article>
-          </div>
-        </section>
-
-        <section class="home-section privacy-card">
-          <div class="privacy-icon"><i data-lucide="lock-keyhole"></i></div>
-          <div>
-            <h3>Private by design</h3>
-            <p>Your selected media is processed locally in your browser. It is not uploaded to a VYORA server.</p>
-          </div>
-        </section>
-      </section>
-
-      <section class="screen" id="importScreen">
-        <div class="screen-heading">
-          <button class="back-button" data-back="homeScreen" aria-label="Go back">
-            <i data-lucide="arrow-left"></i>
-          </button>
-          <div>
-            <span class="section-kicker">NEW PROJECT</span>
-            <h2>Import your footage</h2>
-          </div>
-        </div>
-
-        <div class="import-layout">
-          <label class="drop-zone" id="videoDropZone" for="videoInput">
-            <input id="videoInput" type="file" accept="video/*" hidden>
-            <span class="drop-icon"><i data-lucide="cloud-upload"></i></span>
-            <strong>Choose a video</strong>
-            <span class="drop-copy">Tap to browse your device</span>
-            <span class="drop-format">MP4 · MOV · WEBM · M4V</span>
-          </label>
-
-          <div class="selected-file hidden" id="selectedFileCard">
-            <div class="file-preview">
-              <video id="importPreview" playsinline muted></video>
-              <span class="file-play-icon"><i data-lucide="play"></i></span>
+              <label class="choice-card">
+                <input type="radio" name="borderMode" value="blur">
+                <span class="choice-symbol">▤</span>
+                <span class="choice-copy">
+                  <strong>Blur Background</strong>
+                  <small>Fill empty space with a blurred video background.</small>
+                </span>
+                <span class="choice-check">✓</span>
+              </label>
             </div>
-            <div class="file-information">
-              <strong id="selectedFileName">No video selected</strong>
-              <span id="selectedFileMeta">—</span>
+          </div>
+
+          <!-- STEP 4: BORDER AMOUNT -->
+          <div class="wizard-step" data-step="3">
+            <div class="step-icon">◉</div>
+            <h3>Adjust border amount</h3>
+            <p class="step-help">
+              Fine-tune the framing amount.
+            </p>
+
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="borderAmount">Amount</label>
+                <strong id="borderAmountValue">0%</strong>
+              </div>
+              <input type="range" id="borderAmount" min="0" max="20" value="0">
+              <div class="range-labels">
+                <span>0%</span>
+                <span>20%</span>
+              </div>
             </div>
-            <button class="icon-button danger" id="removeVideoButton" aria-label="Remove video">
-              <i data-lucide="trash-2"></i>
-            </button>
           </div>
 
-          <div class="import-note">
-            <i data-lucide="info"></i>
-            <p>For smoother editing, start with a short video. Large 4K files may be demanding on mobile devices.</p>
+          <!-- STEP 5: POSITION -->
+          <div class="wizard-step" data-step="4">
+            <div class="step-icon">⌖</div>
+            <h3>Video positioning</h3>
+            <p class="step-help">
+              Choose how your subject should appear inside the frame.
+            </p>
+
+            <div class="position-grid">
+              <button type="button" class="position-option" data-position="top">
+                <span>↑</span>
+                <strong>Top</strong>
+              </button>
+              <button type="button" class="position-option selected" data-position="center">
+                <span>⊙</span>
+                <strong>Center</strong>
+              </button>
+              <button type="button" class="position-option" data-position="bottom">
+                <span>↓</span>
+                <strong>Bottom</strong>
+              </button>
+            </div>
           </div>
 
-          <button class="primary-button full-width" id="continueToRatioButton" disabled>
-            Continue <i data-lucide="arrow-right"></i>
-          </button>
-        </div>
-      </section>
+          <!-- STEP 6: QUALITY -->
+          <div class="wizard-step" data-step="5">
+            <div class="step-icon">✧</div>
+            <h3>Choose processing quality</h3>
+            <p class="step-help">
+              Higher quality may require more processing time and memory.
+            </p>
 
-      <section class="screen" id="ratioScreen">
-        <div class="screen-heading">
-          <button class="back-button" data-back="importScreen" aria-label="Go back">
-            <i data-lucide="arrow-left"></i>
-          </button>
-          <div>
-            <span class="section-kicker">PROJECT SETUP</span>
-            <h2>Choose your canvas</h2>
-            <p>Select the frame shape for your video.</p>
+            <div class="select-card">
+              <label for="processingQuality">Processing quality</label>
+              <select id="processingQuality">
+                <option value="standard">Standard</option>
+                <option value="high" selected>High</option>
+                <option value="maximum">Maximum</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div class="ratio-grid" id="ratioGrid">
-          <button class="ratio-option selected" data-ratio="9:16">
-            <span class="ratio-shape shape-vertical"></span>
-            <strong>9:16</strong><small>Reels / Shorts</small>
-          </button>
-          <button class="ratio-option" data-ratio="16:9">
-            <span class="ratio-shape shape-horizontal"></span>
-            <strong>16:9</strong><small>YouTube</small>
-          </button>
-          <button class="ratio-option" data-ratio="1:1">
-            <span class="ratio-shape shape-square"></span>
-            <strong>1:1</strong><small>Square</small>
-          </button>
-          <button class="ratio-option" data-ratio="4:5">
-            <span class="ratio-shape shape-four-five"></span>
-            <strong>4:5</strong><small>Portrait post</small>
-          </button>
-          <button class="ratio-option" data-ratio="5:4">
-            <span class="ratio-shape shape-five-four"></span>
-            <strong>5:4</strong><small>Landscape post</small>
-          </button>
-          <button class="ratio-option" data-ratio="3:4">
-            <span class="ratio-shape shape-three-four"></span>
-            <strong>3:4</strong><small>Portrait</small>
-          </button>
-          <button class="ratio-option" data-ratio="4:3">
-            <span class="ratio-shape shape-four-three"></span>
-            <strong>4:3</strong><small>Classic</small>
-          </button>
-          <button class="ratio-option" data-ratio="2:3">
-            <span class="ratio-shape shape-two-three"></span>
-            <strong>2:3</strong><small>Poster</small>
-          </button>
-          <button class="ratio-option" data-ratio="3:2">
-            <span class="ratio-shape shape-three-two"></span>
-            <strong>3:2</strong><small>Photo</small>
-          </button>
-          <button class="ratio-option" data-ratio="21:9">
-            <span class="ratio-shape shape-wide"></span>
-            <strong>21:9</strong><small>Cinematic</small>
-          </button>
-          <button class="ratio-option" data-ratio="9:21">
-            <span class="ratio-shape shape-tall"></span>
-            <strong>9:21</strong><small>Full vertical</small>
-          </button>
-          <button class="ratio-option" data-ratio="2.35:1">
-            <span class="ratio-shape shape-cinema"></span>
-            <strong>2.35:1</strong><small>Widescreen</small>
-          </button>
-          <button class="ratio-option" data-ratio="1.85:1">
-            <span class="ratio-shape shape-film"></span>
-            <strong>1.85:1</strong><small>Film</small>
-          </button>
-          <button class="ratio-option" data-ratio="1:2">
-            <span class="ratio-shape shape-story"></span>
-            <strong>1:2</strong><small>Story tall</small>
-          </button>
-          <button class="ratio-option" data-ratio="custom">
-            <span class="ratio-shape shape-custom"><i data-lucide="sliders-horizontal"></i></span>
-            <strong>Custom</strong><small>Set your own</small>
-          </button>
-        </div>
+          <!-- STEP 7: TRIM START -->
+          <div class="wizard-step" data-step="6">
+            <div class="step-icon">◀</div>
+            <h3>Set trim start</h3>
+            <p class="step-help">
+              Choose where your edited video should begin.
+            </p>
 
-        <div class="custom-ratio-panel hidden" id="customRatioPanel">
-          <label>Width <input type="number" id="customRatioWidth" min="1" max="8192" value="1080"></label>
-          <span>:</span>
-          <label>Height <input type="number" id="customRatioHeight" min="1" max="8192" value="1920"></label>
-        </div>
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="trimStart">Start time</label>
+                <strong id="trimStartValue">00:00</strong>
+              </div>
+              <input type="range" id="trimStart" min="0" max="100" value="0" disabled>
+              <label class="checkbox-row">
+                <input type="checkbox" id="fullVideoStart" checked>
+                <span>Use full video start</span>
+              </label>
+            </div>
+          </div>
 
-        <button class="primary-button full-width" id="continueToEditorButton">
-          Open editor <i data-lucide="arrow-right"></i>
-        </button>
-      </section>
+          <!-- STEP 8: TRIM END -->
+          <div class="wizard-step" data-step="7">
+            <div class="step-icon">▶</div>
+            <h3>Set trim end</h3>
+            <p class="step-help">
+              Choose where your edited video should finish.
+            </p>
 
-      <section class="screen" id="editorScreen">
-        <div id="editorMount"></div>
-      </section>
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="trimEnd">End time</label>
+                <strong id="trimEndValue">00:00</strong>
+              </div>
+              <input type="range" id="trimEnd" min="0" max="100" value="100" disabled>
+              <label class="checkbox-row">
+                <input type="checkbox" id="fullVideoEnd" checked>
+                <span>Use full video end</span>
+              </label>
+            </div>
+          </div>
 
-    </main>
+          <!-- STEP 9: SHARPEN -->
+          <div class="wizard-step" data-step="8">
+            <div class="step-icon">✥</div>
+            <h3>Sharpen your video</h3>
+            <p class="step-help">
+              Adjust edge sharpness. Strong sharpening can create artifacts.
+            </p>
 
-    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="sharpenAmount">Sharpen amount</label>
+                <strong id="sharpenValue">0</strong>
+              </div>
+              <input type="range" id="sharpenAmount" min="0" max="100" value="0">
+            </div>
+          </div>
 
-    <div class="modal-backdrop hidden" id="modalBackdrop">
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-        <div class="modal-top">
-          <h3 id="modalTitle">VYORA Studio</h3>
-          <button class="icon-button" id="closeModalButton" aria-label="Close">
-            <i data-lucide="x"></i>
-          </button>
-        </div>
-        <div id="modalBody"></div>
-      </div>
-    </div>
+          <!-- STEP 10: COLOUR -->
+          <div class="wizard-step" data-step="9">
+            <div class="step-icon">◐</div>
+            <h3>Colour & enhancement</h3>
+            <p class="step-help">
+              Fine-tune your video appearance.
+            </p>
 
-  </div>
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="brightness">Brightness</label>
+                <strong id="brightnessValue">100%</strong>
+              </div>
+              <input type="range" id="brightness" min="50" max="150" value="100">
+            </div>
 
-  <script src="scripts/project.js"></script>
-<script src="scripts/media.js"></script>
-<script src="scripts/timeline.js"></script>
-<script src="scripts/tools.js"></script>
-<script src="scripts/export.js"></script>
-<script src="scripts/editor.js"></script>
-<script type="module" src="scripts/app.js"></script>
-</body>
-    </html>
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="contrast">Contrast</label>
+                <strong id="contrastValue">100%</strong>
+              </div>
+              <input type="range" id="contrast" min="50" max="150" value="100">
+            </div>
+
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="saturation">Saturation</label>
+                <strong id="saturationValue">100%</strong>
+              </div>
+              <input type="range" id="saturation" min="0" max="200" value="100">
+            </div>
+          </div>
+
+          <!-- STEP 11: TEXT LAYERS -->
+          <div class="wizard-step" data-step="10">
+            <div class="step-icon">T</div>
+            <h3>Text & layers</h3>
+            <p class="step-help">
+              Add lyrics, captions and multiple independent text layers.
+            </p>
+
+            <div class="layer-toolbar">
+              <button type="button" class="primary-button" id="addTextLayer">
+                ＋ Add Text Layer
+              </button>
+            </div>
+
+            <div class="text-presets">
+              <p class="field-label">READY-MADE STYLES</p>
+
+              <div class="preset-grid">
+                <button type="button" class="preset-option" data-preset="cinematic">
+                  <strong>01</strong>
+                  <span>Cinematic</span>
+                </button>
+                <button type="button" class="preset-option" data-preset="glow">
+                  <strong>02</strong>
+                  <span>Neon Glow</span>
+                </button>
+                <button type="button" class="preset-option" data-preset="minimal">
+                  <strong>03</strong>
+                  <span>Minimal</span>
+                </button>
+                <button type="button" class="preset-option" data-preset="bold">
+                  <strong>04</strong>
+                  <span>Bold Lyrics</span>
+                </button>
+                <button type="button" class="preset-option" data-preset="social">
+                  <strong>05</strong>
+                  <span>Social Style</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="layers-list" id="layersList">
+              <div class="empty-layers">
+                No text layers yet. Add your first layer.
+              </div>
+            </div>
+
+            <div class="layer-editor" id="layerEditor" hidden>
+              <label for="layerText">Text content</label>
+              <textarea id="layerText" rows="2" placeholder="Type your text or lyrics..."></textarea>
+
+              <div class="two-column-fields">
+                <label>
+                  Font size
+                  <input type="number" id="layerFontSize" min="8" max="200" value="40">
+                </label>
+                <label>
+                  Text colour
+                  <input type="color" id="layerColor" value="#ffffff">
+                </label>
+              </div>
+
+              <div class="two-column-fields">
+                <label>
+                  Start time (seconds)
+                  <input type="number" id="layerStart" min="0" step="0.1" value="0">
+                </label>
+                <label>
+                  End time (seconds)
+                  <input type="number" id="layerEnd" min="0" step="0.1" value="5">
+                </label>
+              </div>
+
+              <label for="layerFont">Font</label>
+              <select id="layerFont">
+                <option value="DM Sans">DM Sans</option>
+                <option value="Space Grotesk">Space Grotesk</option>
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+              </select>
+
+              <label for="layerPosition">Position</label>
+              <select id="layerPosition">
+                <option value="top">Top</option>
+                <option value="center" selected>Center</option>
+                <option value="bottom">Bottom</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- STEP 12: AUDIO -->
+          <div class="wizard-step" data-step="11">
+            <div class="step-icon">♫</div>
+            <h3>Audio settings</h3>
+            <p class="step-help">
+              Add audio and adjust volume and fades.
+            </p>
+
+            <label class="upload-box compact-upload" for="audioInput">
+              <span class="upload-icon">♫</span>
+              <strong>Add Audio</strong>
+              <span>Select an audio file</span>
+            </label>
+
+            <input type="file" id="audioInput" accept="audio/*" hidden>
+
+            <div class="uploaded-file" id="uploadedAudio" hidden>
+              <span class="file-icon">♫</span>
+              <div class="file-details">
+                <strong id="audioFileName">Audio file</strong>
+                <small>Selected audio</small>
+              </div>
+              <button type="button" id="removeAudioButton">Remove</button>
+            </div>
+
+            <div class="range-card">
+              <div class="range-heading">
+                <label for="audioVolume">Volume</label>
+                <strong id="audioVolumeValue">100%</strong>
+              </div>
+              <input type="range" id="audioVolume" min="0" max="100" value="100">
+            </div>
+
+            <div class="two-column-fields">
+              <label>
+                Fade in (seconds)
+                <input type="number" id="audioFadeIn" min="0" max="30" step="0.5" value="0">
+              </label>
+              <label>
+                Fade out (seconds)
+                <input type="nu
