@@ -1,8 +1,10 @@
 
 /* =====================================================
-   VPEET STUDIO — VIDEO PROCESSING ENGINE
-   FFmpeg WebAssembly Integration
-   Trim / Crop / Blur / Resize / FPS / Color / Text / Audio
+   VPEET STUDIO — VIDEO ENGINE
+   FFmpeg.wasm 0.12.10
+   Video: Trim / Crop / Blur / Resize / FPS / Colour
+   Text: Browser Canvas PNG overlays
+   Audio: Original + Added audio mix / volume / fades
 ===================================================== */
 
 (function () {
@@ -11,196 +13,214 @@
   const project = window.VPEET_PROJECT =
     window.VPEET_PROJECT || {};
 
-  let ffmpeg = null;
-  let loaded = false;
-  let busy = false;
-  let cancelled = false;
-
-  let progressCallback = () => {};
-  let logCallback = () => {};
+  const CORE_BASE =
+    "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
 
   const state = {
-    inputName: "vpeet_input.mp4",
-    outputName: "vpeet_export.mp4",
+    ffmpeg: null,
+    loaded: false,
+    busy: false,
+    cancelled: false,
     progress: 0,
-    status: "idle"
+    status: "idle",
+    inputName: "vpeet_input.mp4",
+    audioName: "vpeet_audio.mp3",
+    outputName: "vpeet_export.mp4",
+    progressCallback: null,
+    logCallback: null,
+    lastBlob: null
   };
 
-  /* =========================================
-     HELPERS
-  ========================================= */
+  const $ = (s) => document.querySelector(s);
 
   function emit(name, detail = {}) {
     window.dispatchEvent(
-      new CustomEvent("vpeet:" + name, {
-        detail
-      })
+      new CustomEvent("vpeet:" + name, { detail })
     );
   }
 
   function log(message) {
     console.log("[VPEET ENGINE]", message);
-    logCallback(message);
+
+    if (typeof state.logCallback === "function") {
+      state.logCallback(message);
+    }
+
     emit("engine-log", { message });
   }
 
-  function setProgress(value) {
+  function status(message) {
+    state.status = message;
+    emit("engine-status", { message });
+  }
+
+  function progress(value) {
     state.progress = Math.max(
       0,
       Math.min(100, Number(value) || 0)
     );
 
-    progressCallback(state.progress);
+    if (typeof state.progressCallback === "function") {
+      state.progressCallback(state.progress);
+    }
 
     emit("render-progress", {
       progress: state.progress
     });
   }
 
+  function num(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function time(value) {
+    return Math.max(0, num(value)).toFixed(3);
+  }
+
+  function cleanFileName(value) {
+    return String(value || "vpeet-export")
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^\w-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "vpeet-export";
+  }
+
   function getFFmpegClass() {
-    if (window.FFmpegWASM?.FFmpeg) {
-      return window.FFmpegWASM.FFmpeg;
-    }
-
-    if (window.FFmpeg?.FFmpeg) {
-      return window.FFmpeg.FFmpeg;
-    }
-
-    return null;
-  }
-
-  function safeNumber(value, fallback = 0) {
-    const number = Number(value);
-
-    return Number.isFinite(number)
-      ? number
-      : fallback;
-  }
-
-  function seconds(value) {
-    return Math.max(0, safeNumber(value))
-      .toFixed(3);
-  }
-
-  function escapeDrawtext(value) {
-    return String(value ?? "")
-      .replace(/\\/g, "\\\\")
-      .replace(/:/g, "\\:")
-      .replace(/'/g, "\\'")
-      .replace(/%/g, "\\%")
-      .replace(/\[/g, "\\[")
-      .replace(/\]/g, "\\]")
-      .replace(/,/g, "\\,")
-      .replace(/;/g, "\\;");
+    return window.FFmpegWASM?.FFmpeg ||
+      window.FFmpeg?.FFmpeg ||
+      null;
   }
 
   /* =========================================
-     LOAD FFMPEG
+     INITIALIZE FFMPEG
   ========================================= */
 
   async function initialize(options = {}) {
-    if (loaded && ffmpeg) return true;
+    if (state.loaded && state.ffmpeg) {
+      return true;
+    }
 
     const FFmpegClass = getFFmpegClass();
 
     if (!FFmpegClass) {
       throw new Error(
-        "FFmpeg WebAssembly library is not loaded. " +
-        "FFmpeg core must be added to index.html first."
+        "FFmpeg library missing. Check index.html scripts."
       );
     }
 
-    ffmpeg = new FFmpegClass();
+    const util = window.FFmpegUtil;
 
-    ffmpeg.on("progress", event => {
-      const percent = event.progress * 100;
-
-      setProgress(percent);
-    });
-
-    ffmpeg.on("log", event => {
-      log(event.message);
-    });
-
-    const loadOptions = {};
-
-    if (options.coreURL && options.wasmURL) {
-      loadOptions.coreURL = options.coreURL;
-      loadOptions.wasmURL = options.wasmURL;
+    if (!util || typeof util.toBlobURL !== "function") {
+      throw new Error(
+        "FFmpegUtil missing. Load @ffmpeg/util first."
+      );
     }
 
-    await ffmpeg.load(loadOptions);
+    status("Loading FFmpeg engine...");
 
-    loaded = true;
+    const ff = new FFmpegClass();
 
+    ff.on("log", ({ message }) => {
+      log(message);
+    });
+
+    ff.on("progress", ({ progress: value }) => {
+      // FFmpeg progress is approximate for some exports.
+      progress(value * 100);
+    });
+
+    const base = options.coreBase || CORE_BASE;
+
+    const coreURL = await util.toBlobURL(
+      base + "/ffmpeg-core.js",
+      "text/javascript"
+    );
+
+    const wasmURL = await util.toBlobURL(
+      base + "/ffmpeg-core.wasm",
+      "application/wasm"
+    );
+
+    await ff.load({ coreURL, wasmURL });
+
+    state.ffmpeg = ff;
+    state.loaded = true;
     state.status = "ready";
 
+    log("FFmpeg engine loaded.");
     emit("engine-ready");
-
-    log("FFmpeg WebAssembly loaded.");
 
     return true;
   }
 
   /* =========================================
-     INPUT FILE
+     FILE HELPERS
   ========================================= */
 
-  async function writeInput(file) {
-    if (!ffmpeg || !loaded) {
-      throw new Error("Initialize the engine first.");
-    }
-
+  async function writeFile(name, file) {
     if (!(file instanceof Blob)) {
-      throw new Error("A valid video file is required.");
+      throw new Error("Invalid file: " + name);
     }
 
-    await ffmpeg.writeFile(
-      state.inputName,
+    await state.ffmpeg.writeFile(
+      name,
       new Uint8Array(await file.arrayBuffer())
     );
+  }
 
-    log("Video added to processing memory.");
+  async function deleteFile(name) {
+    try {
+      await state.ffmpeg.deleteFile(name);
+    } catch (_) {}
   }
 
   /* =========================================
-     VIDEO SETTINGS
+     PROJECT SETTINGS
   ========================================= */
 
-  function getVideoSettings() {
-    const settings = {
-      ...(project.export || {}),
-      ...(project.defaults?.export || {})
+  function getExportSettings() {
+    return {
+      ...(window.VPEET_CONFIG?.defaults?.export || {}),
+      ...(project.defaults?.export || {}),
+      ...(project.export || {})
     };
-
-    return settings;
   }
 
-  function getEffectSettings() {
-    if (window.VPEET_EFFECTS) {
-      return window.VPEET_EFFECTS.getExportSettings();
+  function getEffects() {
+    try {
+      if (window.VPEET_EFFECTS?.getExportSettings) {
+        return window.VPEET_EFFECTS.getExportSettings() || {};
+      }
+    } catch (e) {
+      log("Could not read effects module settings.");
     }
 
     return project.effects || {};
   }
 
-  function getTextLayers() {
-    return (project.textLayers || []).filter(
-      layer => !layer.hidden
-    );
+  function getRatio() {
+    const value = String(project.aspectRatio || "9:16");
+    const parts = value.split(":").map(Number);
+
+    if (
+      parts.length !== 2 ||
+      !parts[0] ||
+      !parts[1] ||
+      !Number.isFinite(parts[0]) ||
+      !Number.isFinite(parts[1])
+    ) {
+      return [9, 16];
+    }
+
+    return parts;
   }
 
-  /* =========================================
-     RESOLUTION
-  ========================================= */
-
-  function getResolution() {
-    const settings = getVideoSettings();
-
-    const resolution =
-      settings.resolution ||
-      settings.quality ||
-      "1080p";
+  function getDimensions() {
+    const settings = getExportSettings();
 
     const resolutions = {
       "480p": 480,
@@ -210,507 +230,691 @@
       "2160p": 2160
     };
 
-    return resolutions[resolution] || 1080;
+    const resolution = settings.resolution ||
+      settings.quality ||
+      "1080p";
+
+    const height = resolutions[resolution] || 1080;
+    const [rw, rh] = getRatio();
+
+    let width = Math.round(height * rw / rh);
+
+    width = Math.max(2, Math.round(width / 2) * 2);
+
+    return {
+      width,
+      height: Math.max(2, Math.round(height / 2) * 2)
+    };
   }
 
   function getFPS() {
-    const settings = getVideoSettings();
+    const settings = getExportSettings();
 
-    const fps = safeNumber(
-      settings.fps,
-      30
-    );
-
-    return Math.max(24, Math.min(60, fps));
+    return clamp(num(settings.fps, 30), 24, 60);
   }
 
   function getBitrate() {
-    const settings = getVideoSettings();
+    const settings = getExportSettings();
 
-    const quality = settings.bitrate ||
+    const value =
+      settings.bitrate ||
       settings.qualityPreset ||
       "high";
 
-    const bitrates = {
-      low: "2500k",
-      medium: "5000k",
-      high: "8000k",
-      ultra: "14000k"
+    const presets = {
+      low: 2500,
+      medium: 5000,
+      high: 8000,
+      ultra: 14000
     };
 
-    if (typeof quality === "number") {
-      return Math.max(1000, quality) + "k";
+    if (typeof value === "number") {
+      return Math.round(clamp(value, 1000, 50000)) + "k";
     }
 
-    return bitrates[quality] || "8000k";
-  }
-
-  /* =========================================
-     ASPECT RATIO
-  ========================================= */
-
-  function getRatio() {
-    const ratio =
-      project.aspectRatio ||
-      "9:16";
-
-    const parts = String(ratio).split(":");
-
-    const width = Number(parts[0]);
-    const height = Number(parts[1]);
-
-    if (
-      !Number.isFinite(width) ||
-      !Number.isFinite(height) ||
-      width <= 0 ||
-      height <= 0
-    ) {
-      return [9, 16];
+    if (/^\d+k$/i.test(String(value))) {
+      return value;
     }
 
-    return [width, height];
+    return (presets[value] || 8000) + "k";
   }
 
-  function getDimensions() {
-    const [ratioW, ratioH] = getRatio();
+  function getTrim() {
+    const start = Math.max(0, num(project.trimStart, 0));
 
-    const targetHeight = getResolution();
-
-    let width = Math.round(
-      targetHeight * ratioW / ratioH
+    const duration = Math.max(
+      0,
+      num(project.duration, 0)
     );
 
-    let height = targetHeight;
+    const end = num(project.trimEnd, duration);
 
-    width = Math.max(2, Math.round(width / 2) * 2);
-    height = Math.max(2, Math.round(height / 2) * 2);
+    if (end > 0 && end <= start) {
+      throw new Error(
+        "Trim End must be greater than Trim Start."
+      );
+    }
 
-    return { width, height };
+    return {
+      start,
+      end,
+      duration: end > 0 ? end - start : 0
+    };
+  }
+
+  function getPosition() {
+    return {
+      x: clamp(num(project.positionX, 50), 0, 100),
+      y: clamp(num(project.positionY, 50), 0, 100)
+    };
   }
 
   /* =========================================
-     VIDEO FILTERS
+     VIDEO FILTER GRAPH
   ========================================= */
 
-  function buildColorFilters() {
-    const effects = getEffectSettings();
-
+  function buildColourChain() {
+    const e = getEffects();
     const filters = [];
 
-    const brightness =
-      safeNumber(effects.brightness, 100) / 100;
-
-    const exposure =
-      safeNumber(effects.exposure, 0);
-
-    const contrast =
-      safeNumber(effects.contrast, 100) / 100;
-
-    const saturation =
-      safeNumber(effects.saturation, 100) / 100;
+    const brightness = num(e.brightness, 100);
+    const contrast = num(e.contrast, 100);
+    const saturation = num(e.saturation, 100);
+    const exposure = num(e.exposure, 0);
 
     filters.push(
       "eq=brightness=" +
-      (brightness - 1 + exposure / 100).toFixed(3) +
-      ":contrast=" + contrast.toFixed(3) +
-      ":saturation=" + saturation.toFixed(3)
+      clamp((brightness - 100) / 100 + exposure / 100, -1, 1).toFixed(3) +
+      ":contrast=" +
+      clamp(contrast / 100, 0, 3).toFixed(3) +
+      ":saturation=" +
+      clamp(saturation / 100, 0, 3).toFixed(3)
     );
 
-    const temperature =
-      safeNumber(effects.temperature, 0);
-
-    const tint =
-      safeNumber(effects.tint, 0);
+    const temperature = num(e.temperature, 0);
+    const tint = num(e.tint, 0);
 
     if (temperature !== 0 || tint !== 0) {
-      const red = Math.max(
-        0.5,
-        Math.min(1.5, 1 + temperature / 200)
-      );
-
-      const blue = Math.max(
-        0.5,
-        Math.min(1.5, 1 - temperature / 200)
-      );
-
-      const green = Math.max(
-        0.5,
-        Math.min(1.5, 1 + tint / 200)
-      );
+      const red = clamp(temperature / 100, -1, 1);
+      const blue = clamp(-temperature / 100, -1, 1);
+      const green = clamp(tint / 100, -1, 1);
 
       filters.push(
-        "colorbalance=rs=" + (red - 1).toFixed(3) +
-        ":gs=" + (green - 1).toFixed(3) +
-        ":bs=" + (blue - 1).toFixed(3)
+        "colorbalance=rs=" + red.toFixed(3) +
+        ":gs=" + green.toFixed(3) +
+        ":bs=" + blue.toFixed(3)
       );
     }
 
-    const sharpen = safeNumber(effects.sharpen, 0);
+    const sharpen = num(e.sharpen, 0);
 
     if (sharpen > 0) {
-      const amount = Math.min(2, sharpen / 50);
+      const amount = clamp(sharpen / 50, 0, 2);
 
       filters.push(
-        "unsharp=5:5:" +
-        amount.toFixed(2) +
-        ":5:5:0"
+        "unsharp=5:5:" + amount.toFixed(2) + ":5:5:0"
       );
     }
 
-    const fade = safeNumber(effects.fade, 0);
+    const fade = num(e.fade, 0);
 
     if (fade > 0) {
       filters.push(
         "eq=gamma=" +
-        (1 - fade / 200).toFixed(3)
+        clamp(1 - fade / 200, 0.1, 2).toFixed(3)
       );
     }
 
     return filters;
   }
 
-  /* =========================================
-     CROP / BLUR BACKGROUND
-  ========================================= */
+  function buildVideoGraph(textInputs) {
+    const d = getDimensions();
+    const trim = getTrim();
+    const pos = getPosition();
 
-  function buildVideoFilters() {
-    const dimensions = getDimensions();
-
-    const width = dimensions.width;
-    const height = dimensions.height;
-
-    const borderMode =
-      project.borderMode || "crop";
+    const width = d.width;
+    const height = d.height;
 
     const filters = [];
 
-    if (borderMode === "blur") {
+    const trimFilter = trim.end > 0
+      ? "trim=start=" + time(trim.start) +
+        ":end=" + time(trim.end) +
+        ",setpts=PTS-STARTPTS"
+      : "trim=start=" + time(trim.start) +
+        ",setpts=PTS-STARTPTS";
+
+    const mode = project.borderMode || "crop";
+
+    if (mode === "blur") {
       filters.push(
-        "split=2[background][foreground]"
+        "[0:v]" + trimFilter +
+        ",split=2[bgsrc][fgsrc]"
       );
 
       filters.push(
-        "[background]scale=" +
-        width + ":" + height +
-        ":force_original_aspect_ratio=increase," +
-        "crop=" + width + ":" + height +
+        "[bgsrc]scale=" + width + ":" + height +
+        ":force_original_aspect_ratio=increase" +
+        ",crop=" + width + ":" + height +
         ",boxblur=20:10[bg]"
       );
 
       filters.push(
-        "[foreground]scale=" +
-        width + ":" + height +
+        "[fgsrc]scale=" + width + ":" + height +
         ":force_original_aspect_ratio=decrease[fg]"
       );
 
       filters.push(
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2[base]"
       );
     } else {
-      filters.push(
-        "scale=" +
-        width + ":" + height +
-        ":force_original_aspect_ratio=increase"
-      );
+      const x = "(iw-ow)*" + (pos.x / 100).toFixed(3);
+      const y = "(ih-oh)*" + (pos.y / 100).toFixed(3);
 
       filters.push(
-        "crop=" + width + ":" + height
+        "[0:v]" + trimFilter +
+        ",scale=" + width + ":" + height +
+        ":force_original_aspect_ratio=increase" +
+        ",crop=" + width + ":" + height +
+        ":" + x + ":" + y +
+        "[base]"
       );
     }
 
-    filters.push(...buildColorFilters());
+    let current = "base";
+    let chain = [];
+
+    chain.push(...buildColourChain());
+    chain.push("fps=" + getFPS());
+
+    if (chain.length) {
+      filters.push(
+        "[" + current + "]" +
+        chain.join(",") +
+        "[vfx]"
+      );
+      current = "vfx";
+    }
+
+    for (let i = 0; i < textInputs.length; i++) {
+      const item = textInputs[i];
+      const next = "text" + i;
+
+      filters.push(
+        "[" + current + "][" + item.inputIndex + ":v]" +
+        "overlay=0:0:enable='between(t," +
+        time(item.start) + "," +
+        time(item.end) + ")'" +
+        "[" + next + "]"
+      );
+
+      current = next;
+    }
 
     filters.push(
-      "fps=" + getFPS()
+      "[" + current + "]format=yuv420p[vout]"
     );
 
-    return {
-      filters,
-      dimensions
-    };
+    return filters.join(";");
   }
 
   /* =========================================
-     TEXT LAYERS
+     TEXT LAYERS AS TRANSPARENT PNG
+     This avoids depending on FFmpeg drawtext.
   ========================================= */
 
-  function buildTextFilters() {
-    const layers = getTextLayers();
-
-    const filters = [];
-
-    layers.forEach(layer => {
-      const text = escapeDrawtext(layer.text);
-
-      if (!text) return;
-
-      const start = safeNumber(layer.start);
-      const end = safeNumber(layer.end, 5);
-
-      if (end <= start) return;
-
-      const x = safeNumber(layer.x, 50);
-      const y = safeNumber(layer.y, 50);
-
-      const fontSize = Math.max(
-        8,
-        Math.min(200, safeNumber(layer.size, 36))
-      );
-
-      const color = String(
-        layer.color || "#ffffff"
-      ).replace("#", "0x");
-
-      const alpha = Math.max(
-        0,
-        Math.min(1, safeNumber(layer.opacity, 1))
-      );
-
-      filters.push(
-        "drawtext=text='" + text + "'" +
-        ":fontsize=" + fontSize +
-        ":fontcolor=" + color +
-        "@" + alpha.toFixed(2) +
-        ":x=(w-text_w)*" + (x / 100).toFixed(3) +
-        ":y=(h-text_h)*" + (y / 100).toFixed(3) +
-        ":enable='between(t," +
-        seconds(start) + "," +
-        seconds(end) + ")'"
-      );
+  function getTextLayers() {
+    return (project.textLayers || []).filter(layer => {
+      return !layer.hidden &&
+        String(layer.text || "").trim() !== "";
     });
-
-    return filters;
   }
 
-  /* =========================================
-     TRIM
-  ========================================= */
+  function drawTextCanvas(layer, dimensions) {
+    const canvas = document.createElement("canvas");
 
-  function getTrimSettings() {
-    const start = Math.max(
-      0,
-      safeNumber(project.trimStart, 0)
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+
+    const ctx = canvas.getContext("2d");
+
+    const size = clamp(
+      num(layer.size, 36),
+      8,
+      220
     );
 
-    const end = safeNumber(
-      project.trimEnd,
-      project.duration || 0
-    );
+    const family = String(
+      layer.fontFamily || layer.font || "Arial"
+    ).replace(/["'\\]/g, "");
 
-    if (end > 0 && end <= start) {
-      throw new Error(
-        "Trim end must be greater than trim start."
-      );
+    const weight = layer.bold ? "bold" : "normal";
+    const italic = layer.italic ? "italic " : "";
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = italic + weight + " " + size + "px " + family;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const x = canvas.width *
+      clamp(num(layer.x, 50), 0, 100) / 100;
+
+    const y = canvas.height *
+      clamp(num(layer.y, 50), 0, 100) / 100;
+
+    const text = String(layer.text || "");
+
+    const color = layer.color || "#ffffff";
+    const opacity = clamp(num(layer.opacity, 1), 0, 1);
+
+    ctx.globalAlpha = opacity;
+
+    if (layer.shadow !== false) {
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = Math.max(2, size * 0.12);
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
     }
 
-    return { start, end };
+    if (layer.strokeColor) {
+      ctx.lineWidth = Math.max(1, size * 0.06);
+      ctx.strokeStyle = layer.strokeColor;
+      ctx.strokeText(text, x, y);
+    }
+
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error("Could not create text overlay."));
+          return;
+        }
+
+        resolve(blob);
+      }, "image/png");
+    });
+  }
+
+  async function prepareTextInputs() {
+    const layers = getTextLayers();
+    const dimensions = getDimensions();
+    const trim = getTrim();
+
+    const prepared = [];
+
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i];
+
+      const start = num(layer.start, 0);
+      const end = num(layer.end, 5);
+
+      if (end <= start) continue;
+
+      const blob = await drawTextCanvas(
+        layer,
+        dimensions
+      );
+
+      const name = "vpeet_text_" + i + ".png";
+
+      await writeFile(name, blob);
+
+      prepared.push({
+        name,
+        inputIndex: 1 + i,
+        start: Math.max(0, start - trim.start),
+        end: Math.max(0, end - trim.start)
+      });
+    }
+
+    return prepared;
   }
 
   /* =========================================
-     AUDIO FILTERS
+     AUDIO PROBE
+  ========================================= */
+
+  async function probeInputHasAudio() {
+    const ff = state.ffmpeg;
+
+    if (typeof ff.ffprobe !== "function") {
+      // If ffprobe is unavailable, keep original audio mapping optional.
+      return true;
+    }
+
+    try {
+      await ff.ffprobe([
+        "-v", "error",
+        "-show_entries", "stream=codec_type",
+        "-of", "json",
+        state.inputName,
+        "-o", "vpeet_probe.json"
+      ]);
+
+      const raw = await ff.readFile("vpeet_probe.json");
+      const json = JSON.parse(
+        new TextDecoder().decode(raw)
+      );
+
+      return (json.streams || []).some(
+        stream => stream.codec_type === "audio"
+      );
+
+    } catch (error) {
+      log("Audio probe unavailable; using optional audio mapping.");
+      return true;
+    }
+  }
+
+  /* =========================================
+     AUDIO FILTER GRAPH
   ========================================= */
 
   function getAudioSettings() {
-    const audio = project.audio || {};
+    const a = project.audio || {};
 
     return {
-      file: audio.file || null,
-      start: safeNumber(audio.start, 0),
-      end: audio.end,
-      volume: safeNumber(audio.volume, 80),
-      videoVolume: safeNumber(audio.videoVolume, 100),
-      fadeIn: safeNumber(audio.fadeIn, 0),
-      fadeOut: safeNumber(audio.fadeOut, 0)
+      file: a.file || null,
+      volume: clamp(num(a.volume, 80), 0, 200),
+      videoVolume: clamp(num(a.videoVolume, 100), 0, 200),
+      start: Math.max(0, num(a.start, 0)),
+      end: num(a.end, 0),
+      fadeIn: Math.max(0, num(a.fadeIn, 0)),
+      fadeOut: Math.max(0, num(a.fadeOut, 0))
     };
   }
 
+  function audioChain(label, settings, clipDuration, isMusic) {
+    const filters = [];
+
+    if (isMusic && settings.end > settings.start) {
+      filters.push(
+        "atrim=start=" + time(settings.start) +
+        ":end=" + time(settings.end)
+      );
+    } else if (!isMusic) {
+      filters.push(
+        "atrim=start=0" +
+        (clipDuration > 0
+          ? ":duration=" + time(clipDuration)
+          : "")
+      );
+    }
+
+    filters.push("asetpts=PTS-STARTPTS");
+
+    const volume = isMusic
+      ? settings.volume
+      : settings.videoVolume;
+
+    filters.push(
+      "volume=" + (volume / 100).toFixed(3)
+    );
+
+    const fadeIn = isMusic ? settings.fadeIn : 0;
+
+    if (fadeIn > 0) {
+      filters.push(
+        "afade=t=in:st=0:d=" + time(fadeIn)
+      );
+    }
+
+    const fadeOut = isMusic ? settings.fadeOut : 0;
+
+    if (fadeOut > 0 && clipDuration > 0) {
+      const fadeStart = Math.max(
+        0,
+        clipDuration - fadeOut
+      );
+
+      filters.push(
+        "afade=t=out:st=" + time(fadeStart) +
+        ":d=" + time(fadeOut)
+      );
+    }
+
+    return "[" + label + "]" +
+      filters.join(",") +
+      "[" + label + "out]";
+  }
+
+  function buildAudioGraph(hasOriginalAudio, hasMusic) {
+    const settings = getAudioSettings();
+    const trim = getTrim();
+    const duration = trim.duration;
+
+    const parts = [];
+
+    if (hasOriginalAudio) {
+      parts.push(
+        audioChain("0:a", settings, duration, false)
+      );
+    }
+
+    if (hasMusic) {
+      parts.push(
+        audioChain("music:a", settings, duration, true)
+      );
+    }
+
+    if (hasOriginalAudio && hasMusic) {
+      parts.push(
+        "[0:aout][music:aout]" +
+        "amix=inputs=2:duration=first:dropout_transition=2" +
+        "[aout]"
+      );
+    } else if (hasOriginalAudio) {
+      parts.push("[0:aout]anull[aout]");
+    } else if (hasMusic) {
+      parts.push("[music:aout]anull[aout]");
+    }
+
+    return parts.join(";");
+  }
+
   /* =========================================
-     EXPORT COMMAND
+     BUILD EXPORT COMMAND
   ========================================= */
 
-  function buildCommand() {
-    const command = [];
+  async function buildCommand(textInputs, hasMusic) {
+    const trim = getTrim();
+    const settings = getAudioSettings();
 
-    const trim = getTrimSettings();
+    const hasOriginalAudio =
+      await probeInputHasAudio();
 
-    const audio = getAudioSettings();
-
-    const videoFilters = buildVideoFilters();
-
-    const textFilters = buildTextFilters();
-
-    command.push("-i", state.inputName);
-
-    let audioInputIndex = -1;
-
-    if (audio.file) {
-      audioInputIndex = 1;
-      command.push("-i", "vpeet_audio_input");
-    }
-
-    const allFilters = [
-      ...videoFilters.filters,
-      ...textFilters
+    const graph = [
+      buildVideoGraph(textInputs)
     ];
 
-    command.push(
+    const audioGraph = buildAudioGraph(
+      hasOriginalAudio,
+      hasMusic
+    );
+
+    if (audioGraph) {
+      graph.push(audioGraph);
+    }
+
+    const args = [
+      "-hide_banner",
+      "-i", state.inputName
+    ];
+
+    if (hasMusic) {
+      args.push("-i", state.audioName);
+    }
+
+    // FFmpeg complex graph uses labelled output streams.
+    args.push(
       "-filter_complex",
-      allFilters.join(",")
+      graph.join(";")
     );
 
-    if (trim.start > 0) {
-      command.push("-ss", seconds(trim.start));
-    }
-
-    if (trim.end > 0) {
-      command.push("-to", seconds(trim.end));
-    }
-
-    command.push(
-      "-map", "0:v:0"
+    args.push(
+      "-map", "[vout]"
     );
 
-    if (audio.file) {
-      command.push(
-        "-map", "1:a:0?"
-      );
-    } else {
-      command.push(
-        "-map", "0:a:0?"
-      );
+    if (hasOriginalAudio || hasMusic) {
+      args.push("-map", "[aout]");
     }
 
-    command.push(
+    args.push(
       "-c:v", "libx264",
       "-preset", "ultrafast",
       "-b:v", getBitrate(),
       "-pix_fmt", "yuv420p",
       "-r", String(getFPS()),
-      "-movflags", "+faststart"
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-movflags", "+faststart",
+      "-max_muxing_queue_size", "1024"
     );
 
-    if (audio.file) {
-      command.push(
-        "-c:a", "aac",
-        "-b:a", "192k"
-      );
-    } else {
-      command.push("-c:a", "aac");
+    if (trim.duration > 0) {
+      args.push("-t", time(trim.duration));
     }
 
-    command.push(
-      "-shortest",
-      state.outputName
-    );
+    args.push("-y", state.outputName);
 
-    return command;
+    return args;
   }
 
   /* =========================================
-     CANCEL
-  ========================================= */
-
-  function cancel() {
-    if (!ffmpeg || !busy) return;
-
-    cancelled = true;
-
-    try {
-      ffmpeg.terminate();
-    } catch (error) {
-      log("Render cancellation requested.");
-    }
-
-    busy = false;
-    state.status = "cancelled";
-
-    emit("render-cancelled");
-  }
-
-  /* =========================================
-     EXPORT
+     RENDER
   ========================================= */
 
   async function render(options = {}) {
-    if (busy) {
+    if (state.busy) {
       throw new Error("A render is already running.");
     }
 
-    if (!project.video) {
+    if (!(project.video instanceof Blob)) {
       throw new Error("Please upload a video first.");
     }
 
-    busy = true;
-    cancelled = false;
+    state.busy = true;
+    state.cancelled = false;
+    state.lastBlob = null;
 
-    state.status = "rendering";
+    state.inputName = "vpeet_input.mp4";
+    state.audioName = "vpeet_audio.mp3";
     state.outputName =
-      options.outputName || "vpeet_export.mp4";
+      cleanFileName(options.outputName || "vpeet-export") +
+      ".mp4";
 
-    setProgress(0);
-
+    progress(0);
+    status("Preparing export...");
     emit("render-started");
 
     try {
       await initialize(options);
 
-      await writeInput(project.video);
+      const ff = state.ffmpeg;
 
-      /*
-        Audio file is written separately when present.
-        A later audio-mix stage will combine it with
-        original video audio and apply fade controls.
-      */
+      await writeFile(state.inputName, project.video);
 
       const audio = getAudioSettings();
+      const hasMusic = audio.file instanceof Blob;
 
-      if (audio.file) {
-        await ffmpeg.writeFile(
-          "vpeet_audio_input",
-          new Uint8Array(
-            await audio.file.arrayBuffer()
-          )
+      if (hasMusic) {
+        await writeFile(state.audioName, audio.file);
+      }
+
+      status("Preparing text layers...");
+
+      const textInputs = await prepareTextInputs();
+
+      // Text images are added after the video and optional music inputs.
+      for (let i = 0; i < textInputs.length; i++) {
+        textInputs[i].inputIndex =
+          (hasMusic ? 2 : 1) + i;
+
+        // The PNG input is added to FFmpeg in the same order.
+      }
+
+      // Add text image inputs in order.
+      for (const item of textInputs) {
+        const args = [
+          "-loop", "1",
+          "-i", item.name
+        ];
+
+        // FFmpeg inputs must be declared in the final command.
+        item.inputArgs = args;
+      }
+
+      const command = await buildCommand(
+        textInputs,
+        hasMusic
+      );
+
+      // Insert PNG inputs after video and optional music.
+      const inputInsert = [];
+      for (const item of textInputs) {
+        inputInsert.push(
+          "-loop", "1",
+          "-i", item.name
         );
       }
 
-      const command = buildCommand();
+      const firstOutput = command.indexOf("-filter_complex");
 
-      log("Starting video render.");
+      command.splice(
+        firstOutput,
+        0,
+        ...inputInsert
+      );
 
-      await ffmpeg.exec(command);
+      status("Rendering MP4 video...");
+      log("Running FFmpeg export command.");
 
-      if (cancelled) {
+      const result = await ff.exec(command);
+
+      if (state.cancelled) {
         throw new Error("Render cancelled.");
       }
 
-      const data = await ffmpeg.readFile(
-        state.outputName
-      );
+      if (result !== 0) {
+        throw new Error(
+          "FFmpeg returned error code " + result
+        );
+      }
 
-      const output = new Blob(
-        [data.buffer.slice(
-          data.byteOffset,
-          data.byteOffset + data.byteLength
-        )],
+      status("Preparing final MP4...");
+
+      const data = await ff.readFile(state.outputName);
+
+      if (!data || !data.length) {
+        throw new Error("FFmpeg produced an empty file.");
+      }
+
+      const blob = new Blob(
+        [data],
         { type: "video/mp4" }
       );
 
+      state.lastBlob = blob;
       state.status = "completed";
 
-      setProgress(100);
+      progress(100);
 
       emit("render-completed", {
-        blob: output,
+        blob,
         fileName: state.outputName,
-        size: output.size
+        size: blob.size
       });
 
-      log("Render completed.");
+      log("MP4 export completed.");
 
-      return output;
+      return blob;
 
     } catch (error) {
-      state.status = cancelled
+      state.status = state.cancelled
         ? "cancelled"
         : "error";
 
@@ -718,13 +922,48 @@
         message: error.message
       });
 
-      log("Render failed: " + error.message);
+      log("Export failed: " + error.message);
 
       throw error;
 
     } finally {
-      busy = false;
+      state.busy = false;
+
+      // Remove temporary files to reduce memory usage.
+      if (state.loaded && state.ffmpeg) {
+        await deleteFile(state.inputName);
+        await deleteFile(state.audioName);
+        await deleteFile(state.outputName);
+
+        for (let i = 0; i < 30; i++) {
+          await deleteFile("vpeet_text_" + i + ".png");
+        }
+      }
     }
+  }
+
+  /* =========================================
+     CANCEL
+  ========================================= */
+
+  function cancel() {
+    if (!state.busy || !state.ffmpeg) return;
+
+    state.cancelled = true;
+    state.status = "cancelling";
+
+    status("Cancelling render...");
+
+    try {
+      state.ffmpeg.terminate();
+    } catch (error) {
+      log("Could not terminate FFmpeg worker.");
+    }
+
+    state.ffmpeg = null;
+    state.loaded = false;
+
+    emit("render-cancelled");
   }
 
   /* =========================================
@@ -733,38 +972,39 @@
 
   window.VPEET_ENGINE = {
     initialize,
-    writeInput,
-    buildCommand,
-    buildVideoFilters,
-    buildTextFilters,
-    getDimensions,
     render,
     cancel,
 
+    getDimensions,
+    getTrim,
+    buildColourChain,
+    buildVideoGraph,
+    buildAudioGraph,
+
     setProgressCallback(callback) {
-      progressCallback =
-        typeof callback === "function"
-          ? callback
-          : () => {};
+      state.progressCallback =
+        typeof callback === "function" ? callback : null;
     },
 
     setLogCallback(callback) {
-      logCallback =
-        typeof callback === "function"
-          ? callback
-          : () => {};
+      state.logCallback =
+        typeof callback === "function" ? callback : null;
     },
 
     getStatus() {
-      return { ...state };
+      return {
+        loaded: state.loaded,
+        busy: state.busy,
+        progress: state.progress,
+        status: state.status
+      };
     },
 
     isBusy() {
-      return busy;
+      return state.busy;
     }
   };
 
-  console.log("VPEET Video Engine Initialized.");
+  console.log("VPEET Studio Video Engine Ready.");
 
 })();
-  
