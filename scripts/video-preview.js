@@ -1,399 +1,176 @@
 
-/* =========================================
-   VPEET STUDIO — VIDEO PREVIEW ENGINE
-   Fixed for current index.html IDs
-========================================= */
-
-(function () {
+(() => {
   "use strict";
 
-  const $ = (selector) => document.querySelector(selector);
+  const $ = (id) => document.getElementById(id);
 
-  const project = window.VPEET_PROJECT =
-    window.VPEET_PROJECT || {
-      video: null,
-      videoUrl: null,
-      fileName: "",
-      duration: 0,
-      aspectRatio: "9:16",
-      borderMode: "crop",
-      borderAmount: 0,
-      positionX: 50,
-      positionY: 50,
-      zoom: 100
-    };
+  const input = $("videoInput");
+  const video = $("mainVideo");
+  const placeholder = $("previewPlaceholder");
+  const fileBox = $("uploadedFile");
+  const fileName = $("fileName");
+  const fileDetails = $("fileDetails");
+  const removeButton = $("removeVideoButton");
+  const frame = $("previewFrame");
 
-  // Match the actual IDs in index.html
-  const video = $("#mainVideo");
-  const uploadInput = $("#videoInput");
-  const previewFrame = $("#previewFrame");
-  const previewStage = $("#previewStage");
-  const placeholder = $("#previewPlaceholder");
-
-  const previewStatus = $("#previewStatus");
-  const uploadedFile = $("#uploadedFile");
-  const fileNameDisplay = $("#fileName");
-  const fileDetails = $("#fileDetails");
-  const removeButton = $("#removeVideoButton");
-
-  const playButton = $("#playPauseButton");
-  const playIcon = $("#playPauseIcon");
-  const muteButton = $("#muteButton");
-  const muteIcon = $("#muteIcon");
-
-  const currentTimeDisplay = $("#currentTime");
-  const durationDisplay = $("#totalDuration");
-  const previewRatio = $("#previewRatio");
-  const previewResolution = $("#previewResolution");
-
-  const trimStart = $("#trimStart");
-  const trimEnd = $("#trimEnd");
-
-  if (!video || !uploadInput) {
-    console.error("VPEET: mainVideo or videoInput not found.");
+  if (!input || !video) {
+    console.error("VPEET: videoInput ya mainVideo HTML mein nahi mila.");
     return;
   }
 
-  video.playsInline = true;
-  video.preload = "metadata";
-  video.controls = false;
+  let currentURL = null;
 
-  function formatTime(seconds) {
-    if (!Number.isFinite(seconds)) return "00:00";
-
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-
-    return String(mins).padStart(2, "0") + ":" +
-      String(secs).padStart(2, "0");
+  function showError(message) {
+    console.error("VPEET Video:", message);
+    if (placeholder) {
+      placeholder.hidden = false;
+      placeholder.textContent = message;
+    }
   }
 
-  function showVideo() {
-    video.style.display = "block";
-
-    if (placeholder) placeholder.style.display = "none";
-    if (previewStatus) previewStatus.textContent = "VIDEO LOADED";
-    if (previewFrame) previewFrame.classList.add("has-video");
-    if (playButton) playButton.disabled = false;
-    if (muteButton) muteButton.disabled = false;
-    if (uploadedFile) uploadedFile.hidden = false;
-  }
-
-  function showEmpty() {
+  function clearVideo() {
     video.pause();
     video.removeAttribute("src");
     video.load();
-    video.style.display = "none";
 
-    if (placeholder) placeholder.style.display = "";
-    if (previewStatus) previewStatus.textContent = "NO VIDEO";
-    if (previewFrame) previewFrame.classList.remove("has-video");
-    if (playButton) playButton.disabled = true;
-    if (muteButton) muteButton.disabled = true;
-    if (uploadedFile) uploadedFile.hidden = true;
+    if (currentURL) {
+      URL.revokeObjectURL(currentURL);
+      currentURL = null;
+    }
 
-    if (currentTimeDisplay) currentTimeDisplay.textContent = "00:00";
-    if (durationDisplay) durationDisplay.textContent = "00:00";
-    if (previewResolution) previewResolution.textContent = "Resolution: —";
-    if (previewRatio) previewRatio.textContent = "Ratio: —";
-
-    if (playIcon) playIcon.textContent = "▶";
+    input.value = "";
+    if (placeholder) placeholder.hidden = false;
+    if (fileBox) fileBox.hidden = true;
+    if (fileName) fileName.textContent = "";
+    if (fileDetails) fileDetails.textContent = "";
   }
 
-  function updateTime() {
-    if (currentTimeDisplay) {
-      currentTimeDisplay.textContent = formatTime(video.currentTime);
-    }
-
-    if (durationDisplay) {
-      durationDisplay.textContent = formatTime(video.duration);
-    }
-  }
-
-  function updatePreview() {
-    video.style.objectPosition =
-      project.positionX + "% " + project.positionY + "%";
-
-    video.style.transform =
-      "scale(" + (project.zoom / 100) + ")";
-
-    video.style.objectFit =
-      project.borderMode === "crop" ? "cover" : "contain";
-
-    if (previewStage) {
-      previewStage.dataset.borderMode = project.borderMode;
-      previewStage.style.setProperty(
-        "--preview-border",
-        project.borderAmount + "%"
-      );
-    }
-
-    if (previewFrame) {
-      previewFrame.dataset.borderMode = project.borderMode;
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("vpeet:preview-update", {
-        detail: project
-      })
-    );
-  }
-
-  function loadVideo(file) {
+  input.addEventListener("change", () => {
+    const file = input.files && input.files[0];
     if (!file) return;
 
     if (!file.type.startsWith("video/")) {
-      alert("Please select a valid video file.");
+      showError("Please select a video file.");
       return;
     }
 
-    if (project.videoUrl) {
-      URL.revokeObjectURL(project.videoUrl);
-    }
+    if (currentURL) URL.revokeObjectURL(currentURL);
 
-    const objectUrl = URL.createObjectURL(file);
-
-    project.video = file;
-    project.videoUrl = objectUrl;
-    project.fileName = file.name;
-    project.duration = 0;
+    currentURL = URL.createObjectURL(file);
 
     video.pause();
-    video.src = objectUrl;
-    video.load();
+    video.src = currentURL;
+    video.muted = false;
+    video.controls = false;
+    video.playsInline = true;
+    video.preload = "metadata";
 
-    if (fileNameDisplay) {
-      fileNameDisplay.textContent = file.name;
-    }
+    video.onloadedmetadata = () => {
+      if (placeholder) placeholder.hidden = true;
+      if (fileBox) fileBox.hidden = false;
 
-    if (fileDetails) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      fileDetails.textContent = sizeMB + " MB · Loading video...";
-    }
-
-    showVideo();
-
-    video.onloadedmetadata = function () {
-      project.duration = video.duration;
+      if (fileName) fileName.textContent = file.name;
 
       if (fileDetails) {
-        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        const size = (file.size / (1024 * 1024)).toFixed(1);
         fileDetails.textContent =
-          sizeMB + " MB · " + formatTime(video.duration);
+          `${size} MB • ${video.videoWidth} × ${video.videoHeight}`;
       }
 
-      if (previewResolution) {
-        previewResolution.textContent =
-          "Resolution: " + video.videoWidth + " × " + video.videoHeight;
-      }
-
-      if (trimStart) {
-        trimStart.min = 0;
-        trimStart.max = video.duration;
-        trimStart.value = 0;
-        trimStart.disabled = false;
-      }
-
-      if (trimEnd) {
-        trimEnd.min = 0;
-        trimEnd.max = video.duration;
-        trimEnd.value = video.duration;
-        trimEnd.disabled = false;
-      }
-
-      updateTime();
-      updatePreview();
-
-      window.dispatchEvent(
-        new CustomEvent("vpeet:video-loaded", {
-          detail: {
-            file: file,
-            duration: video.duration,
-            width: video.videoWidth,
-            height: video.videoHeight
-          }
-        })
-      );
-
+      video.currentTime = 0;
       console.log("VPEET: Video loaded successfully.");
     };
 
-    video.onerror = function () {
-      console.error("VPEET: Video could not be decoded.");
-      if (previewStatus) previewStatus.textContent = "VIDEO ERROR";
-      alert("This video format could not be previewed. Try another MP4 video.");
+    video.onerror = () => {
+      showError("Video load nahi hui. Dusri MP4 video try karo.");
     };
-  }
 
-  // Upload
-  uploadInput.addEventListener("change", function (event) {
-    const file = event.target.files && event.target.files[0];
-    loadVideo(file);
+    video.load();
   });
 
-  // Remove video
   if (removeButton) {
-    removeButton.addEventListener("click", function () {
-      if (project.videoUrl) {
-        URL.revokeObjectURL(project.videoUrl);
-      }
-
-      project.video = null;
-      project.videoUrl = null;
-      project.fileName = "";
-      project.duration = 0;
-
-      uploadInput.value = "";
-      showEmpty();
-
-      if (trimStart) trimStart.disabled = true;
-      if (trimEnd) trimEnd.disabled = true;
-    });
+    removeButton.addEventListener("click", clearVideo);
   }
 
   // Play / pause
-  async function togglePlayback() {
-    if (!project.video) return;
-
-    if (video.paused) {
-      try {
-        await video.play();
-      } catch (error) {
-        console.warn("Playback failed:", error);
-      }
-    } else {
-      video.pause();
-    }
-  }
-
+  const playButton = $("playPauseButton");
   if (playButton) {
-    playButton.addEventListener("click", togglePlayback);
+    playButton.addEventListener("click", () => {
+      if (video.paused) {
+        video.play().catch((err) => console.error(err));
+      } else {
+        video.pause();
+      }
+    });
   }
 
-  video.addEventListener("play", function () {
-    if (playIcon) playIcon.textContent = "Ⅱ";
+  video.addEventListener("play", () => {
+    const icon = $("playPauseIcon");
+    if (icon) icon.textContent = "❚❚";
   });
 
-  video.addEventListener("pause", function () {
-    if (playIcon) playIcon.textContent = "▶";
+  video.addEventListener("pause", () => {
+    const icon = $("playPauseIcon");
+    if (icon) icon.textContent = "▶";
   });
-
-  video.addEventListener("timeupdate", updateTime);
-  video.addEventListener("loadedmetadata", updateTime);
 
   // Mute
+  const muteButton = $("muteButton");
   if (muteButton) {
-    muteButton.addEventListener("click", function () {
+    muteButton.addEventListener("click", () => {
       video.muted = !video.muted;
-      if (muteIcon) muteIcon.textContent = video.muted ? "🔇" : "🔊";
+      const icon = $("muteIcon");
+      if (icon) icon.textContent = video.muted ? "🔇" : "🔊";
     });
   }
 
-  // Aspect ratio
-  function setAspectRatio(ratio) {
-    if (!ratio) return;
+  // Time display
+  video.addEventListener("timeupdate", () => {
+    const current = $("currentTime");
+    const total = $("totalDuration");
 
-    project.aspectRatio = ratio;
+    const format = (seconds) => {
+      if (!Number.isFinite(seconds)) return "0:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${String(s).padStart(2, "0")}`;
+    };
 
-    if (previewFrame && ratio !== "custom") {
-      const parts = ratio.split(":");
-      const width = Number(parts[0]);
-      const height = Number(parts[1]);
-
-      if (width > 0 && height > 0) {
-        previewFrame.style.aspectRatio = width + " / " + height;
-      }
-    }
-
-    if (previewRatio) {
-      previewRatio.textContent = "Ratio: " + ratio;
-    }
-
-    document.querySelectorAll("[data-ratio]").forEach((button) => {
-      button.classList.toggle(
-        "selected",
-        button.dataset.ratio === ratio
-      );
-    });
-
-    updatePreview();
-  }
-
-  document.addEventListener("click", function (event) {
-    const button = event.target.closest("[data-ratio]");
-    if (button) setAspectRatio(button.dataset.ratio);
+    if (current) current.textContent = format(video.currentTime);
+    if (total) total.textContent = format(video.duration);
   });
 
-  // Border mode
-  document.querySelectorAll('input[name="borderMode"]').forEach((input) => {
-    input.addEventListener("change", function () {
-      project.borderMode = input.value;
+  // Aspect ratio buttons
+  document.querySelectorAll("[data-ratio]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const ratio = button.dataset.ratio;
+      const ratios = {
+        "9:16": "9 / 16",
+        "16:9": "16 / 9",
+        "1:1": "1 / 1",
+        "4:5": "4 / 5",
+        "original": "auto"
+      };
 
-      document.querySelectorAll(".choice-card").forEach((card) => {
-        const radio = card.querySelector('input[name="borderMode"]');
-        card.classList.toggle("selected", !!radio && radio.checked);
+      if (!ratios[ratio]) return;
+
+      document.querySelectorAll("[data-ratio]").forEach((b) => {
+        b.classList.toggle("active", b === button);
+        b.setAttribute("aria-pressed", b === button ? "true" : "false");
       });
 
-      updatePreview();
+      if (frame) frame.style.aspectRatio =
+        ratio === "original" && video.videoWidth
+          ? `${video.videoWidth} / ${video.videoHeight}`
+          : ratios[ratio];
     });
   });
 
-  // Border amount
-  const borderInput = $("#borderAmount");
-  const borderValue = $("#borderAmountValue");
+  // Initial preview state
+  video.style.display = "block";
+  video.style.width = "100%";
+  video.style.height = "100%";
+  video.style.objectFit = "contain";
 
-  if (borderInput) {
-    borderInput.addEventListener("input", function () {
-      project.borderAmount = Number(borderInput.value) || 0;
-      if (borderValue) borderValue.textContent = project.borderAmount + "%";
-      updatePreview();
-    });
-  }
-
-  // Position
-  document.querySelectorAll("[data-position]").forEach((button) => {
-    button.addEventListener("click", function () {
-      const position = button.dataset.position;
-
-      project.positionY =
-        position === "top" ? 0 :
-        position === "bottom" ? 100 : 50;
-
-      document.querySelectorAll("[data-position]").forEach((item) => {
-        item.classList.toggle("selected", item === button);
-      });
-
-      updatePreview();
-    });
-  });
-
-  // Trim controls
-  if (trimStart) {
-    trimStart.addEventListener("input", function () {
-      const value = Number(trimStart.value) || 0;
-      const label = $("#trimStartValue");
-      if (label) label.textContent = formatTime(value);
-      if (video.duration) video.currentTime = value;
-    });
-  }
-
-  if (trimEnd) {
-    trimEnd.addEventListener("input", function () {
-      const label = $("#trimEndValue");
-      if (label) label.textContent = formatTime(Number(trimEnd.value));
-    });
-  }
-
-  // Public API
-  window.VPEET_PREVIEW = {
-    loadVideo,
-    updatePreview,
-    setAspectRatio,
-    togglePlayback,
-    getVideo: () => video,
-    getProject: () => project
-  };
-
-  showEmpty();
-  console.log("VPEET Studio Preview Engine Ready.");
+  console.log("VPEET: Video preview module ready.");
 })();
