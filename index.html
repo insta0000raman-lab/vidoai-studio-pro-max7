@@ -545,4 +545,198 @@
               </label>
               <label>
                 Fade out (seconds)
-                <input type="nu
+                <input type="number" id="audioFadeOut" min="0" max="30" step="0.5" value="0">
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 13: EFFECTS -->
+        <section class="wizard-step" data-step="12">
+          <div class="step-heading">
+            <span class="step-kicker">STEP 13 OF 16</span>
+            <h2>Effects</h2>
+            <p>Choose effects for your video.</p>
+          </div>
+
+          <div class="effects-grid" id="effectsGrid">
+            <button type="button" class="effect-option selected" data-effect="none">
+              <span>None</span>
+            </button>
+            <button type="button" class="effect-option" data-effect="vintage">
+              <span>Vintage</span>
+            </button>
+            <button type="button" class="effect-option" data-effect="cinematic">
+              <span>Cinematic</span>
+            </button>
+            <button type="button" class="effect-option" data-effect="film">
+              <span>Film</span>
+            </button>
+            <button type="button" class="effect-option" data-effect="blackwhite">
+              <span>Black & White</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- STEP 14: EXPORT SETTINGS -->
+        <section class="wizard-step" data-step="13">
+          <div class="step-heading">
+            <span class="step-kicker">STEP 14 OF 16</span>
+            <h2>Export Settings</h2>
+            <p>Set your final video quality.</p>
+          </div>
+
+          <div class="settings-card">
+            <label for="exportResolution">Resolution</label>
+            <select id="exportResolution">
+              <option value="720">720p HD</option>
+              <option value="1080" selected>1080p Full HD</option>
+              <option value="1440">1440p QHD</option>
+              <option value="2160">2160p 4K</option>
+            </select>
+
+            <label for="exportFps">Frame Rate</label>
+            <select id="exportFps">
+              <option value="24">24 FPS</option>
+              <option value="30" selected>30 FPS</option>
+              <option value="60">60 FPS</option>
+            </select>
+
+            <label for="exportBitrate">Bitrate</label>
+            <select id="exportBitrate">
+              <option value="5">5 Mbps</option>
+              <option value="8" selected>8 Mbps</option>
+              <option value="12">12 Mbps</option>
+              <option value="16">16 Mbps</option>
+              <option value="25">25 Mbps</option>
+              <option value="40">40 Mbps</option>
+            </select>
+
+            <div class="info-row">
+              <span>Format</span>
+              <strong>MP4 (H.264)</strong>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 15: FINAL PREVIEW -->
+        <section class="wizard-step" data-step="14">
+          <div class="step-heading">
+            <span class="step-kicker">STEP 15 OF 16</span>
+            <h2>Final Preview</h2>
+            <p>Check your video before rendering.</p>
+          </div>
+
+          <div class="review-card">
+            <div class="review-row">
+              <span>Video</span>
+              <strong id="reviewVideoName">No video selected</strong>
+            </div>
+            <div class="review-row">
+              <span>Aspect Ratio</span>
+              <strong id="reviewRatio">9:16</strong>
+            </div>
+            <div class="review-row">
+              <span>Resolution</span>
+              <strong id="reviewResolution">1080p</strong>
+            </div>
+            <div class="review-row">
+              <span>Frame Rate</span>
+              <strong id="reviewFps">30 FPS</strong>
+            </div>
+            <div class="review-row">
+              <span>Text Layers</span>
+              <strong id="reviewTextLayers">0</strong>
+            </div>
+            <div class="review-row">
+              <span>Audio</span>
+              <strong id="reviewAudio">Original audio</strong>
+            </div>
+          </div>
+
+          <button type="button" id="finalPreviewButton" class="secondary-button">
+            Preview Video
+          </button>
+        </section>
+
+        <!-- STEP 16: RENDER -->
+        <section class="wizard-step" data-step="15">
+          <div class="step-heading">
+            <span class="step-kicker">STEP 16 OF 16</span>
+            <h2>Render & Export</h2>
+            <p>Your edited video will be processed here.</p>
+          </div>
+
+          <div class="render-card">
+            <div class="render-icon">V</div>
+            <h3 id="renderStatusTitle">Ready to render</h3>
+            <p id="renderStatusText">
+              Your original video will remain unchanged.
+            </p>
+
+            <div class="progress-track">
+              <div id="renderProgressBar" class="progress-fill"></div>
+            </div>
+
+            <div class="progress-label">
+              <span id="renderProgressText">0%</span>
+              <span id="renderTimeText">Waiting</span>
+            </div>
+
+            <button type="button" id="renderButton" class="primary-button">
+              Start Rendering
+            </button>
+
+            <button type="button" id="cancelRenderButton" class="secondary-button" hidden>
+              Cancel Rendering
+            </button>
+
+            <a id="downloadVideoButton" class="download-button" hidden>
+              Download Edited Video
+            </a>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- WIZARD NAVIGATION -->
+      <div class="wizard-navigation">
+        <button type="button" id="previousStepButton" class="secondary-button">
+          Previous
+        </button>
+
+        <span id="stepCounter">01 / 16</span>
+
+        <button type="button" id="nextStepButton" class="primary-button">
+          Next
+        </button>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- HELP DIALOG -->
+  <dialog id="helpDialog">
+    <div class="dialog-content">
+      <button type="button" id="closeHelpButton" class="dialog-close">×</button>
+      <h2>VPEET Studio Help</h2>
+      <p>
+        VPEET Studio is a browser-based video editing workspace.
+        Upload a video, adjust your settings, add layers and export
+        your edited video.
+      </p>
+    </div>
+  </dialog>
+
+  <!-- JAVASCRIPT FILES -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="video-preview.js"></script>
+  <script src="text-layers.js"></script>
+  <script src="audio.js"></script>
+  <script src="effects.js"></script>
+  <script src="video-engine.js"></script>
+  <script src="export.js"></script>
+
+</body>
+</html>
