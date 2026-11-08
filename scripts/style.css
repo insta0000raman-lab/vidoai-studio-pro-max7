@@ -779,3 +779,77 @@ textarea:focus {
 .text-layer-item.selected {
   outline: 2px solid #8b7cff;
 }
+/* VPEET — RESPONSIVE FULL VIDEO PREVIEW */
+
+.preview-stage {
+  width: 100%;
+  min-width: 0;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.preview-frame {
+  position: relative;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  margin: auto;
+  background: #000;
+  flex: 0 1 auto;
+}
+
+#mainVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  background: #000;
+}
+
+#textOverlayContainer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 20;
+}
+
+#previewPlaceholder {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+#previewPlaceholder[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 700px) {
+  .preview-stage {
+    min-height: 260px;
+    max-height: 55vh;
+  }
+
+  .preview-frame {
+    max-width: 100%;
+    max-height: calc(55vh - 24px);
+  }
+}
