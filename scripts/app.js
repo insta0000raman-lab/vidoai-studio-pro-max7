@@ -24,7 +24,7 @@
     previous: document.getElementById("previousStepButton"),
     next: document.getElementById("nextStepButton"),
     counter: document.getElementById("stepCounter"),
-    progress: document.querySelector(".wizard-progress-fill"),
+    progress: document.getElementById("progressFill"),
     helpButton: document.getElementById("helpButton"),
     helpDialog: document.getElementById("helpDialog"),
     closeHelp: document.getElementById("closeHelpButton")
