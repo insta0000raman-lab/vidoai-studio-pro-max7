@@ -1,0 +1,271 @@
+/* ZERO X MOTION — MOBILE RESPONSIVE */
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 58px 220px minmax(0, 1fr);
+  }
+
+  .inspector {
+    position: fixed;
+    right: 0;
+    top: 58px;
+    bottom: 30px;
+    z-index: 30;
+    width: 260px;
+    transform: translateX(100%);
+    transition: transform .22s ease;
+    box-shadow: -15px 0 40px rgba(0,0,0,.3);
+  }
+
+  .inspector.open {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 760px) {
+  html,
+  body {
+    min-width: 320px;
+    overflow: hidden;
+  }
+
+  .topbar {
+    height: 54px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .brand {
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .brand-mark {
+    width: 29px;
+    height: 29px;
+  }
+
+  .project-heading {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .project-heading input,
+  #projectName {
+    font-size: 11px;
+    max-width: 115px;
+  }
+
+  .topbar-actions {
+    gap: 4px;
+  }
+
+  .topbar-actions button {
+    min-width: 31px;
+    padding: 7px;
+    font-size: 11px;
+  }
+
+  .topbar-actions .desktop-label {
+    display: none;
+  }
+
+  .workspace {
+    position: relative;
+    height: calc(100dvh - 84px);
+    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .tool-sidebar {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 7px 4px;
+    gap: 6px;
+    overflow-y: auto;
+  }
+
+  .tool-sidebar button {
+    width: 39px;
+    min-height: 42px;
+    padding: 5px 2px;
+    font-size: 9px;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .tool-sidebar button .tool-label {
+    font-size: 8px;
+  }
+
+  .asset-panel {
+    position: absolute;
+    z-index: 25;
+    top: 0;
+    bottom: 0;
+    left: 48px;
+    width: min(290px, calc(100vw - 58px));
+    transform: translateX(-110%);
+    transition: transform .2s ease;
+    box-shadow: 15px 0 35px rgba(0,0,0,.35);
+  }
+
+  .asset-panel.open {
+    transform: translateX(0);
+  }
+
+  .editor-area {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    grid-template-rows: 35px minmax(150px, 1fr) 45px minmax(155px, 34%);
+    overflow: hidden;
+  }
+
+  .preview-toolbar {
+    padding: 4px 7px;
+    gap: 5px;
+    overflow-x: auto;
+  }
+
+  .preview-toolbar button {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .preview-stage {
+    min-height: 150px;
+    padding: 7px;
+  }
+
+  .preview-frame {
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .transport-bar {
+    padding: 5px 7px;
+    gap: 6px;
+  }
+
+  .transport-bar button {
+    min-width: 30px;
+    padding: 6px;
+  }
+
+  .transport-bar .time-display {
+    font-size: 10px;
+  }
+
+  .timeline-section {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .timeline-toolbar {
+    padding: 5px 7px;
+    gap: 5px;
+    overflow-x: auto;
+  }
+
+  .timeline-toolbar button {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .timeline-scroll {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .timeline-track {
+    min-width: 600px;
+  }
+
+  .timeline-ruler {
+    min-width: 600px;
+  }
+
+  .inspector {
+    top: 54px;
+    bottom: 30px;
+    width: min(280px, calc(100vw - 48px));
+  }
+
+  .statusbar {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 9px;
+  }
+
+  .statusbar .secondary-status {
+    display: none;
+  }
+
+  .dialog-card {
+    padding: 15px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand-name {
+    display: none;
+  }
+
+  .project-heading input,
+  #projectName {
+    max-width: 90px;
+  }
+
+  .topbar-actions button {
+    min-width: 29px;
+  }
+
+  .editor-area {
+    grid-template-rows: 33px minmax(135px, 1fr) 42px minmax(145px, 36%);
+  }
+
+  .preview-stage {
+    padding: 4px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .export-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (orientation: landscape) and (max-width: 900px) {
+  .editor-area {
+    grid-template-rows: 30px minmax(100px, 1fr) 38px minmax(110px, 32%);
+  }
+
+  .preview-stage {
+    padding: 3px;
+  }
+
+  .timeline-section {
+    min-height: 100px;
+  }
+}
+
+/* Touch-friendly controls */
+@media (pointer: coarse) {
+  button {
+    min-height: 34px;
+  }
+
+  input[type="range"] {
+    min-height: 25px;
+  }
+
+  .timeline-clip {
+    min-height: 34px;
+  }
+}
